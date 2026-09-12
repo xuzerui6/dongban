@@ -1,0 +1,25 @@
+{
+  "name": "motion-buddy-demo",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit -p tsconfig.app.json && vite build",
+    "test:core": "esbuild tests/core.test.ts --bundle --platform=node --format=esm --outfile=.test-dist/core.test.mjs && node .test-dist/core.test.mjs",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^0.10.22-rc.20250304",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.4.1",
+    "esbuild": "^0.25.12",
+    "typescript": "~5.7.2",
+    "vite": "^6.1.0"
+  }
+}

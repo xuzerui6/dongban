@@ -1,0 +1,14 @@
+import { useEffect, useState } from 'react'
+import { AvatarFigure } from '../components/AvatarFigure'
+import { Icon } from '../components/Icons'
+import type { WorkoutSession } from '../types'
+import sakuraGloves from '../assets/equipment/gloves/sakura_gloves.png'
+
+const fmt=(s:number)=>`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`
+export function Summary({ result, avatar, home }: { result: WorkoutSession; avatar: () => void; home: () => void }) {
+  const [reward, setReward] = useState(result.unlocked.includes('sakura_gloves'))
+  useEffect(()=>{if('speechSynthesis'in window){const u=new SpeechSynthesisUtterance('训练完成，做得漂亮');speechSynthesis.speak(u)}},[])
+  const grade = result.formScore >= 90 ? 'S' : result.formScore >= 80 ? 'A' : result.formScore >= 70 ? 'B' : 'C'
+  const zones = [result.zone1Seconds, result.zone2Seconds, result.zone3Seconds, result.zone4Seconds, result.zone5Seconds]
+  return <div className="page summary-page"><div className="summary-hero"><span className="eyebrow">WORKOUT COMPLETE</span><h2>训练完成！</h2><p>今天的你，又比昨天强了一点。</p><div className="summary-avatar"><AvatarFigure view="front"/></div><div className="xp-earned">+{result.xpEarned} <small>XP</small></div></div><section className="summary-sheet"><div className="score-title"><div className="big-score">{result.formScore}<small>分</small></div><div><b>{result.formScore>=90?'优秀动作':'训练完成'}</b><span>{result.perfectReps} 次完美动作</span></div><span className="grade">{grade}</span></div><div className="summary-grid"><div><small>训练时长</small><b>{fmt(result.durationSeconds)}</b></div><div><small>完成次数</small><b>{result.reps} 次</b></div><div><small>平均心率</small><b>{result.averageBpm !== null ? `${result.averageBpm} BPM` : '无数据'}</b></div><div><small>最高心率</small><b>{result.maxBpm !== null ? `${result.maxBpm} BPM` : '无数据'}</b></div></div><div className="zone-summary">{zones.map((seconds,index)=><div key={index}><span>Zone {index+1}</span><b>{fmt(seconds)}</b></div>)}</div><div className="reward-row"><Icon name="spark"/><span><b>成长已记录</b><small>{result.heartRateSource==='ble'?'心率来源：BLE 设备':'本次未收到 BLE 心率包'}</small></span><em>+{result.xpEarned} XP</em></div><button className="primary" onClick={avatar}>查看我的形象 <Icon name="arrow"/></button><button className="text-btn" onClick={home}>返回首页</button></section>{reward&&<div className="modal-backdrop"><div className="reward-modal"><button className="modal-close" onClick={()=>setReward(false)}>×</button><span className="eyebrow">ACHIEVEMENT UNLOCKED</span><img className="pixel-art reward-equipment-image" src={sakuraGloves} alt="樱花手套"/><h3>精准掌控</h3><p>完成一次动作评分 90+ 的训练</p><div className="unlocked-item"><img className="pixel-art unlocked-equipment-image" src={sakuraGloves} alt="樱花手套"/><div><small>正式装备</small><b>樱花手套</b></div><em>N</em></div><button className="primary" onClick={()=>{setReward(false);avatar()}}>立即去装备</button></div></div>}</div>
+}
