@@ -3,7 +3,7 @@ import type { NormalizedLandmark } from '@mediapipe/tasks-vision'
 
 const connections = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]]
 
-export function PoseCanvas({ videoRef, landmarks, demo, phase }: { videoRef: React.RefObject<HTMLVideoElement>; landmarks: NormalizedLandmark[] | null; demo: boolean; phase: string }) {
+export function PoseCanvas({ videoRef, landmarks, demo, phase, affectedJoints = [] }: { videoRef: React.RefObject<HTMLVideoElement>; landmarks: NormalizedLandmark[] | null; demo: boolean; phase: string; affectedJoints?: number[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return
@@ -23,9 +23,9 @@ export function PoseCanvas({ videoRef, landmarks, demo, phase }: { videoRef: Rea
       }
       ctx.strokeStyle='#21ed80'; ctx.lineWidth=5; ctx.lineCap='round'; ctx.shadowColor='#21ed80'; ctx.shadowBlur=8
       for (const [a,b] of connections) if (pts[a]&&pts[b]) { ctx.beginPath(); ctx.moveTo(pts[a].x,pts[a].y); ctx.lineTo(pts[b].x,pts[b].y); ctx.stroke() }
-      ctx.shadowBlur=0; ctx.fillStyle='#36f093'; for (const i of [11,12,13,14,15,16,23,24,25,26,27,28]) if(pts[i]) {ctx.beginPath();ctx.arc(pts[i].x,pts[i].y,6,0,Math.PI*2);ctx.fill()}
+      ctx.shadowBlur=0; for (const i of [11,12,13,14,15,16,23,24,25,26,27,28]) if(pts[i]) {ctx.fillStyle=affectedJoints.includes(i)?'#ffbe3d':'#36f093';ctx.beginPath();ctx.arc(pts[i].x,pts[i].y,affectedJoints.includes(i)?8:6,0,Math.PI*2);ctx.fill()}
     }
     draw()
-  }, [landmarks, demo, phase, videoRef])
+  }, [landmarks, demo, phase, videoRef, affectedJoints])
   return <><video ref={videoRef} className="hidden-video" muted playsInline/><canvas ref={canvasRef} width={360} height={410} className="pose-canvas"/></>
 }

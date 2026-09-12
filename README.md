@@ -15,7 +15,10 @@ pnpm dev
 
 - 首页、今日任务、连续训练、XP 与等级
 - 摄像头 + MediaPipe Pose 浏览器端姿态识别
-- 深蹲状态机、自动计数，以及由深度、膝稳定、躯干倾角和左右对称计算的动作评分
+- 深蹲状态机、2 秒站姿校准、五帧中值平滑、角度迟滞和防重复计数
+- 身体入镜、深度、膝盖轨迹、躯干前倾和左右对称五类实时矫姿
+- 小智官方 WebSocket / 裸 Opus / STT / TTS / emotion / MCP 对话，失败时自动降级
+- 用户授权后的低频 JPEG 关键帧复核；原始图片、音频和完整聊天不落盘
 - Web Bluetooth 标准心率服务（0x180D / 0x2A37），支持 uint8/uint16 Measurement 与断连状态
 - 所有 BPM、平均/最大心率与 Zone 数据仅由真实 BLE Notify 数据包驱动
 - 统一 WorkoutSession：训练计时、动作指标、平均/最大心率及 Zone 1–5 停留秒数
@@ -33,10 +36,17 @@ pnpm build
 pnpm preview
 ```
 
+## 小智与 Vercel 配置
+
+复制 `.env.example`，在 Vercel 项目中配置 `XIAOZHI_COOKIE_SECRET`，并保留 `VITE_XIAOZHI_ENABLED=true`。部署后到 Project Settings → Functions 开启 Fluid Compute。WebSocket 函数最长运行 300 秒，浏览器会按 1、2、4、8、15 秒退避重连；训练计数不依赖网络。
+
+首次进入训练后，页面会显示六位激活码。登录 [xiaozhi.me](https://xiaozhi.me) 完成绑定即可。角色提示词见 [`docs/XIAOZHI_PERSONA.md`](docs/XIAOZHI_PERSONA.md)，第三方说明见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+
 ## 自测
 
 ```bash
-pnpm run test:core
+pnpm test
+pnpm test:e2e
 pnpm run build
 ```
 

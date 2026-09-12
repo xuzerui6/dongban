@@ -7,6 +7,7 @@ export interface SquatFrameAnalysis {
   trunkScore: number
   symmetryScore: number
   formScore: number
+  confidence: number
 }
 
 const clamp = (value: number, min = 0, max = 100) => Math.min(max, Math.max(min, value))
@@ -22,7 +23,9 @@ const midpoint = (a: NormalizedLandmark, b: NormalizedLandmark): NormalizedLandm
 export function analyzeSquatFrame(points: NormalizedLandmark[]): SquatFrameAnalysis | null {
   if (points.length < 29) return null
   const required = [11, 12, 23, 24, 25, 26, 27, 28]
-  if (required.some(index => (points[index].visibility ?? 1) < .45)) return null
+  const confidence = Math.min(...required.map(index => points[index].visibility ?? 0))
+  if (confidence < .55) return null
+  if (required.some(index => points[index].x < .035 || points[index].x > .965 || points[index].y < .025 || points[index].y > .985)) return null
   const leftKnee = angle(points[23], points[25], points[27])
   const rightKnee = angle(points[24], points[26], points[28])
   const kneeAngle = (leftKnee + rightKnee) / 2
@@ -35,5 +38,5 @@ export function analyzeSquatFrame(points: NormalizedLandmark[]): SquatFrameAnaly
   const trunkTilt = Math.abs(Math.atan2(shoulderMid.x - hipMid.x, hipMid.y - shoulderMid.y) * 180 / Math.PI)
   const trunkScore = clamp(100 - Math.max(0, trunkTilt - 10) * 3.5)
   const formScore = Math.round(depthScore * .35 + stabilityScore * .25 + trunkScore * .20 + symmetryScore * .20)
-  return { kneeAngle, depthScore, stabilityScore, trunkScore, symmetryScore, formScore }
+  return { kneeAngle, depthScore, stabilityScore, trunkScore, symmetryScore, formScore, confidence }
 }

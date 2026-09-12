@@ -7,3 +7,5 @@ dist/
 vite.config.js
 vite.config.d.ts
 .test-dist/
+test-results/
+playwright-report/

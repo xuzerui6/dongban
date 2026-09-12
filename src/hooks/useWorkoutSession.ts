@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { emptyZoneDurations, incrementZone } from '../lib/heartRate'
-import type { HeartRateZone, WorkoutMetrics, WorkoutSession } from '../types'
+import type { FormBreakdown, HeartRateZone, PoseIssue, VisionInsight, WorkoutMetrics, WorkoutSession } from '../types'
 
 interface HeartRateSnapshot {
   connected: boolean
@@ -12,17 +12,28 @@ interface HeartRateSnapshot {
 }
 const newId = () => typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `workout-${Date.now()}`
 
-export function useWorkoutSession(metrics: WorkoutMetrics, heartRate: HeartRateSnapshot, running: boolean, paused: boolean) {
+type SessionMetrics = WorkoutMetrics & { formBreakdown: FormBreakdown; correctionCounts: Record<PoseIssue, number> }
+const EMPTY_ASSISTANT: { visionInsights: VisionInsight[]; conversationTurnCount: number } = { visionInsights: [], conversationTurnCount: 0 }
+
+export function useWorkoutSession(
+  metrics: SessionMetrics,
+  heartRate: HeartRateSnapshot,
+  running: boolean,
+  paused: boolean,
+  assistant: { visionInsights: VisionInsight[]; conversationTurnCount: number } = EMPTY_ASSISTANT,
+) {
   const [session, setSession] = useState<WorkoutSession | null>(null)
   const sessionRef = useRef<WorkoutSession | null>(null)
   const metricsRef = useRef(metrics)
   const heartRateRef = useRef(heartRate)
+  const assistantRef = useRef(assistant)
   const heartSamples = useRef({ count: 0, total: 0, max: 0 })
   const startPacketCount = useRef(0)
   const previousPacket = useRef<{ timestamp: number; zone: HeartRateZone | null } | null>(null)
 
   useEffect(() => { metricsRef.current = metrics }, [metrics])
   useEffect(() => { heartRateRef.current = heartRate }, [heartRate])
+  useEffect(() => { assistantRef.current = assistant }, [assistant])
 
   useEffect(() => {
     if (!running || sessionRef.current) return
@@ -33,6 +44,7 @@ export function useWorkoutSession(metrics: WorkoutMetrics, heartRate: HeartRateS
       id: newId(), exerciseType: 'squat', startTime: new Date().toISOString(), endTime: null, durationSeconds: 0,
       ...metrics, currentBpm: null, averageBpm: null, maxBpm: null, heartRateSource: null,
       ...emptyZoneDurations(), xpEarned: 0, unlocked: [],
+      visionInsights: assistant.visionInsights, conversationTurnCount: assistant.conversationTurnCount,
     }
     sessionRef.current = started; setSession(started)
   }, [running])
@@ -42,6 +54,13 @@ export function useWorkoutSession(metrics: WorkoutMetrics, heartRate: HeartRateS
     const next = { ...sessionRef.current, ...metrics }
     sessionRef.current = next; setSession(next)
   }, [metrics])
+
+  useEffect(() => {
+    if (!sessionRef.current || sessionRef.current.endTime) return
+    const next = { ...sessionRef.current, visionInsights: assistant.visionInsights, conversationTurnCount: assistant.conversationTurnCount }
+    sessionRef.current = next
+    setSession(next)
+  }, [assistant.visionInsights, assistant.conversationTurnCount])
 
   useEffect(() => {
     if (!running || paused || !sessionRef.current || !heartRate.connected || heartRate.packetCount <= startPacketCount.current || !heartRate.lastPacketAt || !heartRate.currentBpm) return
@@ -91,7 +110,7 @@ export function useWorkoutSession(metrics: WorkoutMetrics, heartRate: HeartRateS
     if (!current) return null
     const liveHeart = heartRateRef.current
     const finished: WorkoutSession = {
-      ...current, ...metricsRef.current, endTime: new Date().toISOString(),
+      ...current, ...metricsRef.current, ...assistantRef.current, endTime: new Date().toISOString(),
       currentBpm: liveHeart.connected && !liveHeart.signalInterrupted ? current.currentBpm : null,
     }
     sessionRef.current = finished; setSession(finished)

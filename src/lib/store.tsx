@@ -3,6 +3,7 @@ import { equipmentSeed, initialState } from './data'
 import type { AppState, Slot, WorkoutSession } from '../types'
 import { applyWorkout, calculateDailyMissionProgress } from './rewards'
 import { emptyZoneDurations } from './heartRate'
+import { migrateWorkoutSession } from './sessionMigration'
 
 type Store = { state: AppState; finishWorkout: (session: WorkoutSession) => WorkoutSession; equip: (slot: Slot, id: string) => void; reset: () => void }
 const StoreContext = createContext<Store | null>(null)
@@ -24,8 +25,8 @@ function loadState(): AppState {
   const equipped = Object.fromEntries(Object.entries(savedEquipped).filter(([, id]) => typeof id === 'string' && validIds.has(id))) as AppState['equipped']
   const equipment = equipmentSeed.map(item => ({ ...item, owned: item.owned || unlockedIds.has(item.id) }))
   const safeHistory = history.filter(item => item && typeof item.startTime === 'string' && typeof item.formScore === 'number').map(item => {
-    if ((item.heartRateSource as string | null) === 'ble') return item
-    return { ...item, currentBpm: null, averageBpm: null, maxBpm: null, heartRateSource: null, ...emptyZoneDurations() }
+    if ((item.heartRateSource as string | null) === 'ble') return migrateWorkoutSession(item)
+    return migrateWorkoutSession({ ...item, currentBpm: null, averageBpm: null, maxBpm: null, heartRateSource: null, ...emptyZoneDurations() })
   })
   return {
     ...initialState, ...legacy, ...profile, ...progress,

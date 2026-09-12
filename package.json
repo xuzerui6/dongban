@@ -5,18 +5,27 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc --noEmit -p tsconfig.app.json && vite build",
+    "build": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.server.json && vite build",
+    "test": "pnpm test:core && pnpm test:integration",
     "test:core": "esbuild tests/core.test.ts --bundle --platform=node --format=esm --outfile=.test-dist/core.test.mjs && node .test-dist/core.test.mjs",
+    "test:integration": "esbuild tests/xiaozhi.integration.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-dist/xiaozhi.integration.test.mjs && node .test-dist/xiaozhi.integration.test.mjs",
+    "test:e2e": "playwright test",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.22-rc.20250304",
+    "express": "^5.2.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.20.2",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.4.1",
     "esbuild": "^0.25.12",
     "typescript": "~5.7.2",
