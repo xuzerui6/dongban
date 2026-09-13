@@ -64,16 +64,28 @@ export class XiaozhiAudio {
     return Boolean(scope.AudioEncoder && scope.AudioDecoder && scope.AudioData && scope.EncodedAudioChunk && window.AudioWorkletNode)
   }
 
-  async startCapture(): Promise<void> {
-    if (this.node) return
+  /**
+   * 必须在用户点击开始训练时调用，提前解锁小智音频使用的 AudioContext。
+   * 这样服务端首个 Opus 包到达时不会被浏览器的自动播放策略静音。
+   */
+  async ensurePlaybackReady(): Promise<void> {
     if (!XiaozhiAudio.supported()) throw new Error('当前浏览器缺少 WebCodecs Opus 或 AudioWorklet')
     this.context ||= new AudioContext({ latencyHint: 'interactive' })
     if (this.context.state === 'suspended') await this.context.resume()
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false })
+  }
+
+  async startCapture(): Promise<void> {
+    if (this.node) return
+    await this.ensurePlaybackReady()
+    const context = this.context
+    if (!context) throw new Error('小智音频上下文初始化失败')
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false })
+    this.stream = stream
     this.objectUrl = URL.createObjectURL(new Blob([workletSource], { type: 'text/javascript' }))
-    await this.context.audioWorklet.addModule(this.objectUrl)
-    this.source = this.context.createMediaStreamSource(this.stream)
-    this.node = new AudioWorkletNode(this.context, 'motion-buddy-mic')
+    await context.audioWorklet.addModule(this.objectUrl)
+    this.source = context.createMediaStreamSource(stream)
+    const node = new AudioWorkletNode(context, 'motion-buddy-mic')
+    this.node = node
     const Encoder = (window as unknown as { AudioEncoder: new (init: { output: (chunk: { byteLength: number; copyTo(target: ArrayBuffer): void }) => void; error: (error: DOMException) => void }) => AudioEncoderLike }).AudioEncoder
     const AudioDataCtor = (window as unknown as { AudioData: new (init: Record<string, unknown>) => { close(): void } }).AudioData
     this.encoder = new Encoder({
@@ -85,8 +97,8 @@ export class XiaozhiAudio {
       error: error => console.warn('[动伴] Opus 编码失败', error.message),
     })
     this.encoder.configure({ codec: 'opus', sampleRate: 16_000, numberOfChannels: 1, bitrate: 24_000 })
-    this.node.port.onmessage = event => {
-      const samples = resample(event.data as Float32Array, this.context?.sampleRate || 48_000, 16_000)
+    node.port.onmessage = event => {
+      const samples = resample(event.data as Float32Array, context.sampleRate, 16_000)
       this.pendingSamples.push(...samples)
       while (this.pendingSamples.length >= 960) {
         const frame = new Float32Array(this.pendingSamples.splice(0, 960))
@@ -99,11 +111,11 @@ export class XiaozhiAudio {
         data.close()
       }
     }
-    this.source.connect(this.node)
+    this.source.connect(node)
     // Worklet must stay connected, but a zero-gain node prevents mic sidetone.
-    const mute = this.context.createGain()
+    const mute = context.createGain()
     mute.gain.value = 0
-    this.node.connect(mute).connect(this.context.destination)
+    node.connect(mute).connect(context.destination)
   }
 
   configureDecoder(sampleRate = 24_000): void {
@@ -138,6 +150,7 @@ export class XiaozhiAudio {
 
   decode(packet: ArrayBuffer): void {
     if (!this.decoder) this.configureDecoder()
+    if (this.context?.state === 'suspended') void this.context.resume().catch(() => undefined)
     const Chunk = (window as unknown as { EncodedAudioChunk: new (init: Record<string, unknown>) => unknown }).EncodedAudioChunk
     this.decoder?.decode(new Chunk({ type: 'key', timestamp: this.decoderTimestamp, duration: 60_000, data: packet }))
     this.decoderTimestamp += 60_000

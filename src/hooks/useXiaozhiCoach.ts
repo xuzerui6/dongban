@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCoachVoice } from './useCoachVoice'
-import { cancelSpeech, speakText } from '../lib/tts'
+import { cancelSpeech } from '../lib/tts'
 import { matchesWakeWord } from '../lib/wakeWord'
 import { XiaozhiAudio } from '../lib/xiaozhiAudio'
 import { abortMessage, helloMessage, listenMessage, mapXiaozhiEmotion, mcpError, mcpResult } from '../lib/xiaozhiProtocol'
@@ -64,6 +64,7 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
   const [conversationTurnCount, setConversationTurnCount] = useState(0)
   const [visionInsights, setVisionInsights] = useState<VisionInsight[]>([])
   const [visionAvailable, setVisionAvailable] = useState(false)
+  const [xiaozhiVoiceReady, setXiaozhiVoiceReady] = useState(false)
 
   const contextRef = useRef(context)
   const stateRef = useRef(state)
@@ -87,7 +88,7 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
     reps: context.reps, targetReps: context.targetReps, phase: context.phase,
     durationSeconds: context.durationSeconds, bpm: context.bpm, active: context.active,
   }), [context])
-  const fallback = useCoachVoice(enabled && fallbackMode, fallbackContext)
+  const fallback = useCoachVoice(enabled && fallbackMode, fallbackContext, { audible: false })
   const source: CoachSource = fallbackMode ? (fallback.hasModel ? 'compatible' : 'local') : 'xiaozhi'
 
   const sendJson = useCallback((message: unknown) => {
@@ -111,6 +112,7 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
         )
       }
       await audioRef.current.startCapture()
+      setXiaozhiVoiceReady(true)
       audioRef.current.setSending(true)
       conversationUntilRef.current = Date.now() + 25_000
       setEmotion('listening')
@@ -222,6 +224,10 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
           if (message.state === 'sentence_start' && message.text) setReply(message.text)
           if (message.state === 'start') {
             audioRef.current?.setSending(false)
+            void audioRef.current?.ensurePlaybackReady().then(
+              () => setXiaozhiVoiceReady(true),
+              () => setXiaozhiVoiceReady(false),
+            )
             setState('speaking')
           }
           if (message.state === 'stop') {
@@ -241,7 +247,7 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
         if (event.code === 4401) {
           setFallbackMode(true)
           setState('fallback')
-          setErrorMessage('小智设备尚未激活，已切换到兼容语音')
+          setErrorMessage('小智设备尚未激活，已切换到文字反馈')
           return
         }
         setState('reconnecting')
@@ -349,20 +355,20 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
 
   const say = useCallback((text: string, priority: CuePriority = 'normal') => {
     if (!text || mutedRef.current) return
-    if (fallbackMode) return fallback.say(text)
+    if (fallbackMode) {
+      setReply(text)
+      return
+    }
     if (stateRef.current === 'listening' || stateRef.current === 'thinking' || stateRef.current === 'speaking') {
       const queued = queuedCueRef.current
       if (!queued || PRIORITY[priority] > PRIORITY[queued.priority]) queuedCueRef.current = { text, priority }
       return
     }
-    stopWakeRecognition()
+    // 小智协议只把服务端下发的裸 Opus 作为官方音色。自动报数与矫姿先显示
+    // 为实时字幕，不再混用浏览器或兼容 TTS；对话回复仍由小智有声播放。
     setReply(text)
-    setState('speaking')
-    void speakText(text).finally(() => {
-      setState('idle')
-      queuedCueRef.current = null
-    })
-  }, [fallbackMode, fallback.say, stopWakeRecognition])
+    queuedCueRef.current = null
+  }, [fallbackMode])
 
   useEffect(() => {
     if (fallbackMode || state !== 'idle' || !queuedCueRef.current) return
@@ -402,6 +408,21 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
     setRetryNonce(value => value + 1)
   }, [])
 
+  const prepareAudio = useCallback(() => {
+    if (fallbackMode || !XIAOZHI_ENABLED) return
+    audioRef.current ||= new XiaozhiAudio(
+      packet => { if (socketRef.current?.readyState === WebSocket.OPEN) socketRef.current.send(packet) },
+      () => undefined,
+    )
+    void audioRef.current.ensurePlaybackReady().then(
+      () => setXiaozhiVoiceReady(true),
+      error => {
+        setXiaozhiVoiceReady(false)
+        setErrorMessage(error instanceof Error ? error.message : '小智音频初始化失败')
+      },
+    )
+  }, [fallbackMode])
+
   const toggleMute = useCallback(() => {
     setMuted(current => {
       if (!current) {
@@ -421,11 +442,12 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
     transcript: fallbackMode ? fallback.transcript : transcript,
     reply: fallbackMode ? fallback.reply : reply,
     emotion: fallbackMode ? (fallback.state === 'thinking' ? 'thinking' : fallback.state === 'speaking' ? 'happy' : 'neutral') as CoachEmotion : emotion,
-    source, wake, interrupt, retry,
+    source, wake, interrupt, retry, prepareAudio,
     sendWorkoutContext: (next: WorkoutContext) => { contextRef.current = next },
     say, requestVision, activationCode, activationMessage, errorMessage: errorMessage || fallback.errorMessage,
     muted, toggleMute, supported: fallbackMode ? fallback.supported : Boolean(recognizerCtor()),
     inConversation: publicState === 'listening' || publicState === 'thinking' || publicState === 'speaking',
-    hasModel: source !== 'local', neural: fallback.neural, visionAvailable, visionInsights, conversationTurnCount,
+    hasModel: source !== 'local', neural: source === 'xiaozhi', xiaozhiVoiceReady: source === 'xiaozhi' && xiaozhiVoiceReady,
+    visionAvailable, visionInsights, conversationTurnCount,
   }
 }

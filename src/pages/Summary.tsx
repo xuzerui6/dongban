@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { AvatarFigure } from '../components/AvatarFigure'
 import { Icon } from '../components/Icons'
 import type { WorkoutSession } from '../types'
@@ -9,7 +9,6 @@ import type { PoseIssue } from '../types'
 const fmt=(s:number)=>`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`
 export function Summary({ result, avatar, home }: { result: WorkoutSession; avatar: () => void; home: () => void }) {
   const [reward, setReward] = useState(result.unlocked.includes('sakura_gloves'))
-  useEffect(()=>{if('speechSynthesis'in window){const u=new SpeechSynthesisUtterance('训练完成，做得漂亮');speechSynthesis.speak(u)}},[])
   const grade = result.formScore >= 90 ? 'S' : result.formScore >= 80 ? 'A' : result.formScore >= 70 ? 'B' : 'C'
   const zones = [result.zone1Seconds, result.zone2Seconds, result.zone3Seconds, result.zone4Seconds, result.zone5Seconds]
   const corrections = (Object.entries(result.correctionCounts || {}) as [PoseIssue, number][]).filter(([, count]) => count > 0).sort((a, b) => b[1] - a[1])

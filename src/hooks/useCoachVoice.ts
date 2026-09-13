@@ -62,7 +62,13 @@ const getRecognizer = () => {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null
 }
 
-export function useCoachVoice(enabled: boolean, context: CoachContext) {
+interface CoachVoiceOptions {
+  /** 关闭后仍保留识别、模型回复和字幕，但不会调用任何非小智 TTS。 */
+  audible?: boolean
+}
+
+export function useCoachVoice(enabled: boolean, context: CoachContext, options: CoachVoiceOptions = {}) {
+  const audible = options.audible ?? true
   const [state, setState] = useState<VoiceState>('off')
   const [transcript, setTranscript] = useState('')
   const [reply, setReply] = useState('')
@@ -77,6 +83,7 @@ export function useCoachVoice(enabled: boolean, context: CoachContext) {
   const stateRef = useRef<VoiceState>('off')
   const mutedRef = useRef(false)
   const hasModelRef = useRef(false)
+  const audibleRef = useRef(audible)
   const historyRef = useRef<ChatMessage[]>([])
 
   const recognitionRef = useRef<MBRecognition | null>(null)
@@ -95,6 +102,7 @@ export function useCoachVoice(enabled: boolean, context: CoachContext) {
 
   useEffect(() => { contextRef.current = context }, [context])
   useEffect(() => { mutedRef.current = muted }, [muted])
+  useEffect(() => { audibleRef.current = audible }, [audible])
 
   const setVoiceState = useCallback((next: VoiceState) => {
     stateRef.current = next
@@ -103,7 +111,7 @@ export function useCoachVoice(enabled: boolean, context: CoachContext) {
 
   // ── 选一个中文发音 ────────────────────────────────────────────
   useEffect(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    if (!audible || typeof window === 'undefined' || !('speechSynthesis' in window)) return
     const pick = () => {
       const voices = speechSynthesis.getVoices()
       voiceRef.current =
@@ -115,7 +123,7 @@ export function useCoachVoice(enabled: boolean, context: CoachContext) {
     pick()
     speechSynthesis.addEventListener('voiceschanged', pick)
     return () => speechSynthesis.removeEventListener('voiceschanged', pick)
-  }, [])
+  }, [audible])
 
   // ── 探测中转站是否配置 ────────────────────────────────────────
   // 不受 enabled 限制：开练之前就要能告诉用户 key 配没配对。
@@ -133,7 +141,10 @@ export function useCoachVoice(enabled: boolean, context: CoachContext) {
   // 报数是最高频的播报，如果每次都等一趟网络往返，「即时报数」就没了。
   // 开练时先把数字和常用鼓励语合成好缓存住，之后播放是零延迟。
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || !audible) {
+      setNeural(false)
+      return
+    }
     unlockAudio()
     const numbers = Array.from({ length: 30 }, (_, i) => String(i + 1))
     prewarm(['我在，你说。', '第一个，开始了', '不着急，准备好了再来', ...numbers])
@@ -148,7 +159,7 @@ export function useCoachVoice(enabled: boolean, context: CoachContext) {
       ticks += 1
     }, 700)
     return () => clearInterval(timer)
-  }, [enabled])
+  }, [audible, enabled])
 
   // ── 识别器启停 ────────────────────────────────────────────────
   const startRecognition = useCallback(() => {
@@ -174,9 +185,9 @@ export function useCoachVoice(enabled: boolean, context: CoachContext) {
   const say = useCallback((text: string) => {
     if (!text) return
 
-    // 静音时不播报，但**必须**保证监听继续。
+    // 文字降级或静音时不播报，但**必须**保证监听继续。
     // 否则一旦走到这里就再也不会调 startRecognition()，麦克风永远起不来。
-    if (mutedRef.current || typeof window === 'undefined') {
+    if (!audibleRef.current || mutedRef.current || typeof window === 'undefined') {
       setReply(text)
       if (!disposedRef.current && stateRef.current !== 'sleeping' && stateRef.current !== 'off' && stateRef.current !== 'failed') {
         wantListeningRef.current = true
@@ -395,14 +406,18 @@ export function useCoachVoice(enabled: boolean, context: CoachContext) {
     failureCountRef.current = 0
     setVoiceState('idle')
 
-    // 开场问候：让用户立刻听到声音。
-    // 这也是一个诊断手段——如果这句能听到但喊唤醒词没反应，说明「说」正常、
-    // 是「听」出了问题（多半是识别服务连不上）；如果连这句都没有，是播放被浏览器挡了。
+    // 兼容链路允许发声时才播放开场问候。动伴主链路会关闭这里的声音，
+    // 确保用户听到的每一句都来自小智官方下发的音频。
     if (!greetedRef.current) {
       greetedRef.current = true
-      window.setTimeout(() => {
-        if (!disposedRef.current) say('我在，说「你好动伴」随时叫我。')
-      }, 600)
+      if (audibleRef.current) {
+        window.setTimeout(() => {
+          if (!disposedRef.current) say('我在，说「你好动伴」随时叫我。')
+        }, 600)
+      } else {
+        setReply('小智语音暂不可用，当前仅保留文字反馈。')
+        startRecognition()
+      }
     } else {
       startRecognition()
     }

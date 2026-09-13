@@ -4,6 +4,16 @@ import { join } from 'node:path'
 
 test('视觉授权选择、演示计数和陪练状态可用', async ({ page }, testInfo) => {
   const errors: string[] = []
+  await page.addInitScript(() => {
+    const scope = window as typeof window & { __motionBuddySpeakCalls?: string[] }
+    scope.__motionBuddySpeakCalls = []
+    if ('speechSynthesis' in window) {
+      Object.defineProperty(window.speechSynthesis, 'speak', {
+        configurable: true,
+        value: (utterance: SpeechSynthesisUtterance) => scope.__motionBuddySpeakCalls?.push(utterance.text),
+      })
+    }
+  })
   page.on('pageerror', error => errors.push(error.message))
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
   await page.route('**/ai/**', route => {
@@ -21,9 +31,10 @@ test('视觉授权选择、演示计数和陪练状态可用', async ({ page }, 
 
   await page.getByRole('button', { name: /使用演示动作/ }).click()
   await expect(page.getByText('姿势稳定', { exact: true }).first()).toBeVisible()
-  await expect(page.getByText(/兼容模型|本地话术/)).toBeVisible()
+  await expect(page.getByText('本地话术 · 仅文字', { exact: true })).toBeVisible()
   await expect.poll(async () => Number(await page.locator('.rep-count b').textContent()), { timeout: 6_000 }).toBeGreaterThan(0)
   await expect(page.locator('.coach-face')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __motionBuddySpeakCalls?: string[] }).__motionBuddySpeakCalls)).toEqual([])
   await page.screenshot({ path: join(tmpdir(), `motion-buddy-${testInfo.project.name}-live.png`) })
   expect(errors).toEqual([])
 })

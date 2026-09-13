@@ -18,10 +18,10 @@ const format = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart
 const VOICE_LABEL: Record<XiaozhiState, string> = {
   off: '', idle: '说「你好动伴」或点这里开始', activating: '首次使用，需要绑定小智账号',
   connecting: '正在连接动伴…', listening: '我在听，你接着说', thinking: '动伴在想…',
-  speaking: '动伴正在说', reconnecting: '网络波动，正在恢复…', fallback: '兼容语音已接管', failed: '语音暂不可用 · 点此重试',
+  speaking: '动伴正在用小智音色说话', reconnecting: '网络波动，正在恢复…', fallback: '小智语音离线 · 文字反馈中', failed: '语音暂不可用 · 点此重试',
 }
 
-const SOURCE_LABEL = { xiaozhi: '小智官方', compatible: '兼容模型', local: '本地话术' }
+const SOURCE_LABEL = { xiaozhi: '小智官方音色', compatible: '兼容模型 · 仅文字', local: '本地话术 · 仅文字' }
 const POSE_STATUS = { stable: '姿势稳定', adjust: '建议调整', uncertain: '无法判断' }
 
 export function Workout({ back, finish }: { back: () => void; finish: (session: WorkoutSession) => void }) {
@@ -103,11 +103,12 @@ export function Workout({ back, finish }: { back: () => void; finish: (session: 
   const startRealPose = () => {
     if (visionConsent === null) return
     unlockAudio()
+    voice.prepareAudio()
     setSimulatedPose(false)
     setActive(true)
     window.setTimeout(pose.start, 30)
   }
-  const startDemo = () => { unlockAudio(); setVisionConsent(false); setSimulatedPose(true); setActive(true) }
+  const startDemo = () => { unlockAudio(); voice.prepareAudio(); setVisionConsent(false); setSimulatedPose(true); setActive(true) }
   const done = () => {
     const completed = workout.finish()
     if (completed) finish({ ...completed, visionInsights: voice.visionInsights, conversationTurnCount: voice.conversationTurnCount })
@@ -127,7 +128,7 @@ export function Workout({ back, finish }: { back: () => void; finish: (session: 
     </div>
     <button className="primary" disabled={visionConsent === null} onClick={startRealPose}><span>📷</span> 开启 AI 摄像头识别</button>
     <button className="secondary" onClick={startDemo}><Icon name="play"/> 使用演示动作</button>
-    <div className="voice-hint"><Icon name="mic" size={15}/><span><b>训练中会主动报数 · 说「你好动伴」连续聊</b><small>小智官方优先，异常时自动切换兼容模型与本地话术；语音播放期间矫姿播报会排队。</small></span></div>
+    <div className="voice-hint"><Icon name="mic" size={15}/><span><b>小智音色对话 · 说「你好动伴」连续聊</b><small>所有可听回复只播放小智官方音频；报数与矫姿实时显示字幕，网络异常时不混用系统音色。</small></span></div>
     <div className="ble-setup"><div><Icon name="bluetooth"/><span><b>{heartRate.deviceName || 'BLE 心率带'}</b><small>{heartRate.status === 'unsupported' ? '请使用桌面 Chrome 或 Edge' : heartRate.connected ? `${heartRate.currentBpm || '--'} BPM · Zone ${heartRate.currentZone || '--'}` : heartRate.errorMessage || '标准 0x180D / 0x2A37'}</small></span></div><button disabled={heartRate.status === 'connecting' || heartRate.status === 'unsupported' || heartRate.connected} onClick={heartRate.connect}>{heartRate.status === 'connecting' ? '正在连接…' : heartRate.connected ? '已连接' : '连接心率带'}</button></div>
   </div>
 
@@ -146,11 +147,11 @@ export function Workout({ back, finish }: { back: () => void; finish: (session: 
     <div className={`coach-panel ${voice.state}`}>
       <span className={`coach-face ${voice.emotion}`} aria-label={`动伴表情：${voice.emotion}`}>{voice.emotion === 'celebrating' ? '★‿★' : voice.emotion === 'concerned' ? '◕︵◕' : voice.emotion === 'thinking' ? '◔_◔' : voice.emotion === 'listening' ? '◉‿◉' : '◕‿◕'}</span>
       <button className="voice-status" onClick={voice.state === 'idle' || voice.state === 'fallback' ? voice.wake : voice.state === 'failed' ? voice.retry : undefined} disabled={!['idle', 'fallback', 'failed'].includes(voice.state)}>
-        <span><b>{VOICE_LABEL[voice.state]}</b><small>{voice.state === 'speaking' || voice.state === 'thinking' ? voice.reply || '…' : voice.transcript || voice.errorMessage || '随时叫我，我会先听你说'}</small></span>
+        <span><b>{VOICE_LABEL[voice.state]}</b><small>{voice.state === 'speaking' || voice.state === 'thinking' ? voice.reply || '…' : voice.transcript || voice.reply || voice.errorMessage || '随时叫我，我会先听你说'}</small></span>
       </button>
       {(voice.state === 'speaking' || voice.state === 'thinking') && <button className="interrupt-btn" onClick={voice.interrupt}>打断</button>}
       <button className="voice-mute" onClick={voice.toggleMute} aria-label={voice.muted ? '打开声音' : '关闭声音'}><Icon name={voice.muted ? 'volumeOff' : 'volume'} size={15}/></button>
-      <em>{SOURCE_LABEL[voice.source]}{voice.visionAvailable && visionConsent ? ' · 视觉就绪' : ''}</em>
+      <em>{SOURCE_LABEL[voice.source]}{voice.xiaozhiVoiceReady ? ' · 声音就绪' : ''}{voice.visionAvailable && visionConsent ? ' · 视觉就绪' : ''}</em>
     </div>
     <div className="zone-card"><div><Icon name="heart"/><span>当前心率<b>{!heartRate.connected ? '未连接' : heartRate.signalInterrupted ? '信号中断' : heartRate.currentBpm ? <>{heartRate.currentBpm} <small>BPM</small></> : '等待数据'}</b></span></div><div className="zones">{[1, 2, 3, 4, 5].map(zone => <span key={zone} className={heartRate.currentZone === zone ? 'current' : ''}><i/>Zone {zone}</span>)}</div></div>
     <div className="workout-actions"><button className="secondary" onClick={() => setPaused(value => !value)}><Icon name={paused ? 'play' : 'pause'}/>{paused ? '继续' : '暂停'}</button><button className="primary" onClick={done}><Icon name="check"/>完成本组</button></div>
