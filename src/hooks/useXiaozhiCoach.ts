@@ -76,6 +76,7 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
   const consentRef = useRef(visionConsent)
   const socketRef = useRef<WebSocket | null>(null)
   const sessionIdRef = useRef('')
+  const mcpReadyRef = useRef(false)
   const audioRef = useRef<XiaozhiAudio | null>(null)
   const wakeRecognitionRef = useRef<MBRecognition | null>(null)
   const wakeRunningRef = useRef(false)
@@ -89,6 +90,7 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
   const latestVisionInsightRef = useRef<VisionInsight | null>(null)
   const lastRepAtRef = useRef<string | null>(null)
   const lastRepIssuesRef = useRef<PoseIssue[]>([])
+  const pendingProgressRef = useRef<Array<Record<string, unknown>>>([])
   const pumpVisionQueueRef = useRef<() => void>(() => undefined)
   const wakeWindowRef = useRef(new WakeWordWindow())
   const wakeDetectedTimerRef = useRef(0)
@@ -176,8 +178,17 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
     if (payload.id === undefined || !payload.method) return
     const sessionId = incomingSessionId || sessionIdRef.current
     if (payload.method === 'initialize') {
+      mcpReadyRef.current = true
       setDataSyncState(current => ({ ...current, mcpReady: true }))
       sendJson(mcpResult(payload.id, { protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'motion-buddy-web', version: '1.1.0' } }, sessionId))
+      const pendingProgress = pendingProgressRef.current.splice(0)
+      let lastSynced = 0
+      for (const progress of pendingProgress) {
+        if (sendJson(mcpNotification('notifications/workout_progress', progress, sessionId))) {
+          lastSynced = Number(progress.reps) || lastSynced
+        }
+      }
+      if (lastSynced) setDataSyncState(current => ({ ...current, lastRepSynced: lastSynced }))
       return
     }
     if (payload.method === 'tools/list') {
@@ -334,6 +345,7 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
         if (disposed) return
         socketRef.current = null
         sessionIdRef.current = ''
+        mcpReadyRef.current = false
         setDataSyncState(current => ({ ...current, mcpReady: false }))
         if (event.code === 4401) {
           setFallbackMode(true)
@@ -519,8 +531,11 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
       ...contextRef.current, reps: rep, lastRepAt: completedAt, lastRepIssues: issues,
       latestVisionInsight: latestVisionInsightRef.current, updatedAt: completedAt,
     }
-    if (sendJson(mcpNotification('notifications/workout_progress', status, sessionIdRef.current))) {
+    if (mcpReadyRef.current && sessionIdRef.current && sendJson(mcpNotification('notifications/workout_progress', status, sessionIdRef.current))) {
       setDataSyncState(current => ({ ...current, lastRepSynced: rep }))
+    } else {
+      pendingProgressRef.current.push(status)
+      pendingProgressRef.current = pendingProgressRef.current.slice(-Math.max(1, contextRef.current.targetReps))
     }
 
     if (fallbackMode || !visionAvailableRef.current || !consentRef.current) {
