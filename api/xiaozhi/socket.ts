@@ -1,7 +1,9 @@
 import { createServer } from 'node:http'
 import express from 'express'
 import { WebSocket, WebSocketServer } from 'ws'
-import { readIdentity } from '../../server/xiaozhi/identity.js'
+import {
+  getIdentityMode, hasPublicSession, isAllowedOrigin, resolveRequestIdentity, type VirtualDeviceIdentity,
+} from '../../server/xiaozhi/identity.js'
 import { fetchOta } from '../../server/xiaozhi/ota.js'
 
 export const maxDuration = 300
@@ -15,7 +17,7 @@ class VisionError extends Error {
   }
 }
 
-async function explainFrame(config: VisionConfig, identity: NonNullable<ReturnType<typeof readIdentity>>, dataUrl: string, question: string) {
+async function explainFrame(config: VisionConfig, identity: VirtualDeviceIdentity, dataUrl: string, question: string) {
   const bytes = Buffer.from(dataUrl.replace(/^data:image\/jpeg;base64,/, ''), 'base64')
   if (!bytes.length || bytes.length > 1_500_000) throw new VisionError('关键帧大小无效')
   const form = new FormData()
@@ -38,7 +40,13 @@ const server = createServer(app)
 const wss = new WebSocketServer({ server })
 
 wss.on('connection', async (browser, request) => {
-  const identity = readIdentity(request)
+  const mode = getIdentityMode()
+  if (mode === 'disabled') return browser.close(4403, 'voice service disabled')
+  if (mode === 'shared') {
+    if (!isAllowedOrigin(request.headers.origin)) return browser.close(4403, 'origin not allowed')
+    if (!hasPublicSession(request)) return browser.close(4401, 'public session missing or expired')
+  }
+  const identity = resolveRequestIdentity(request, mode)
   if (!identity) return browser.close(4401, 'device identity missing')
   let upstream: WebSocket | null = null
   let vision: VisionConfig | null = null

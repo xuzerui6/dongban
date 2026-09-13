@@ -7,6 +7,7 @@ export type Rarity = 'N' | 'R' | 'SR' | 'SSR'
 export type HeartRateZone = 1 | 2 | 3 | 4 | 5
 export type WorkoutPhase = 'standing' | 'descending' | 'bottom' | 'ascending'
 export type XiaozhiState = 'off' | 'idle' | 'activating' | 'connecting' | 'listening' | 'thinking' | 'speaking' | 'reconnecting' | 'fallback' | 'failed'
+export type XiaozhiIdentityMode = 'personal' | 'shared' | 'disabled'
 export type CoachEmotion = 'neutral' | 'listening' | 'thinking' | 'happy' | 'confident' | 'caring' | 'concerned' | 'celebrating'
 export type PoseIssue = 'out_of_frame' | 'insufficient_depth' | 'knee_instability' | 'excessive_trunk_lean' | 'asymmetry'
 export type PoseConfidence = 'stable' | 'adjust' | 'uncertain'
@@ -69,6 +70,10 @@ export interface XiaozhiDataSyncState {
   visionStatus: 'idle' | 'queued' | 'reviewed' | 'failed'
   wakeDetected: boolean
 }
+
+export type XiaozhiDeviceBootstrap =
+  | { status: 'ready'; mode: 'shared' | 'personal' }
+  | { status: 'activating'; mode: 'personal'; code: string; message: string; expiresAt: number }
 
 export interface WorkoutContext {
   reps: number

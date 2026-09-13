@@ -16,7 +16,7 @@ import type { WorkoutContext, WorkoutSession, XiaozhiState } from '../types'
 const format = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 
 const VOICE_LABEL: Record<XiaozhiState, string> = {
-  off: '', idle: '说「你好动伴」或点这里开始', activating: '首次使用，需要绑定小智账号',
+  off: '', idle: '语音陪练已连接 · 说「你好动伴」', activating: '首次使用，需要绑定小智账号',
   connecting: '正在连接动伴…', listening: '我在听，你接着说', thinking: '动伴在想…',
   speaking: '动伴正在用小智音色说话', reconnecting: '网络波动，正在恢复…', fallback: '小智语音离线 · 文字反馈中', failed: '语音暂不可用 · 点此重试',
 }
@@ -145,13 +145,13 @@ export function Workout({ back, finish }: { back: () => void; finish: (session: 
     </div>
     <button className="primary" disabled={visionConsent === null} onClick={startRealPose}><span>📷</span> 开启 AI 摄像头识别</button>
     <button className="secondary" onClick={startDemo}><Icon name="play"/> 使用演示动作</button>
-    <div className="voice-hint"><Icon name="mic" size={15}/><span><b>小智音色对话 · 说「你好动伴」连续聊</b><small>所有可听回复只播放小智官方音频；报数与矫姿实时显示字幕，网络异常时不混用系统音色。</small></span></div>
+    <div className="voice-hint"><Icon name="mic" size={15}/><span><b>小智音色对话 · 说「你好动伴」连续聊</b><small>所有可听回复只播放小智官方音频；语音由云端实时处理，演示账号可能保留对话历史，本站不保存完整录音。</small></span></div>
     <div className="ble-setup"><div><Icon name="bluetooth"/><span><b>{heartRate.deviceName || 'BLE 心率带'}</b><small>{heartRate.status === 'unsupported' ? '请使用桌面 Chrome 或 Edge' : heartRate.connected ? `${heartRate.currentBpm || '--'} BPM · Zone ${heartRate.currentZone || '--'}` : heartRate.errorMessage || '标准 0x180D / 0x2A37'}</small></span></div><button disabled={heartRate.status === 'connecting' || heartRate.status === 'unsupported' || heartRate.connected} onClick={heartRate.connect}>{heartRate.status === 'connecting' ? '正在连接…' : heartRate.connected ? '已连接' : '连接心率带'}</button></div>
   </div>
 
   return <div className="page workout-page live">
     <Header title="深蹲 SQUAT" back={back} action={<span className="live-pill"><i/>{simulatedPose ? 'DEMO' : 'AI 识别中'}</span>}/>
-    {voice.state === 'activating' && <div className="activation-card"><span className="coach-face caring">◕‿◕</span><div><b>绑定小智账号</b><small>{voice.activationMessage}</small><strong>{voice.activationCode}</strong><a href="https://xiaozhi.me" target="_blank" rel="noreferrer">打开 xiaozhi.me 完成绑定</a></div></div>}
+    {voice.state === 'activating' && voice.identityMode === 'personal' && <div className="activation-card"><span className="coach-face caring">◕‿◕</span><div><b>绑定小智账号</b><small>{voice.activationMessage}</small><strong>{voice.activationCode}</strong><a href="https://xiaozhi.me" target="_blank" rel="noreferrer">打开 xiaozhi.me 完成绑定</a></div></div>}
     <div className="workout-stats"><div><Icon name="flame"/><span><b>{format(session?.durationSeconds || 0)}</b><small>训练时长</small></span></div><div><Icon name="heart"/><span><b>{!heartRate.connected ? '未连接' : heartRate.signalInterrupted ? '信号中断' : heartRate.currentBpm ? `${heartRate.currentBpm} BPM` : '等待数据'}</b><small>{heartRate.currentZone ? `BLE · Zone ${heartRate.currentZone}` : 'BLE 心率设备'}</small></span></div></div>
     <div className="camera-card">
       <PoseCanvas videoRef={pose.videoRef} landmarks={pose.landmarks} demo={simulatedPose} phase={metrics.phase} affectedJoints={metrics.poseFeedback.affectedJoints}/>

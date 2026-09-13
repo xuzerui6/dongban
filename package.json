@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.server.json && vite build",
-    "test": "pnpm test:core && pnpm test:integration",
+    "test": "pnpm test:core && pnpm test:shared && pnpm test:integration",
     "test:core": "esbuild tests/core.test.ts --bundle --platform=node --format=esm --outfile=.test-dist/core.test.mjs && node .test-dist/core.test.mjs",
+    "test:shared": "esbuild tests/shared-access.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-dist/shared-access.test.mjs && node .test-dist/shared-access.test.mjs",
     "test:integration": "esbuild tests/xiaozhi.integration.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-dist/xiaozhi.integration.test.mjs && node .test-dist/xiaozhi.integration.test.mjs",
     "test:e2e": "playwright test",
+    "provision:xiaozhi": "esbuild scripts/provision-xiaozhi-shared-device.ts --bundle --platform=node --format=esm --outfile=.test-dist/provision-xiaozhi-shared-device.mjs && node --env-file=.env .test-dist/provision-xiaozhi-shared-device.mjs",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {

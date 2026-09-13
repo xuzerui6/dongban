@@ -7,7 +7,11 @@ import { createCorrectionGateState, decideCorrectionCue, detectPoseIssues, media
 import { abortMessage, helloMessage, listenMessage, mapXiaozhiEmotion, mcpNotification, mcpTextResult } from '../src/lib/xiaozhiProtocol'
 import { matchesWakeWord, WakeWordWindow } from '../src/lib/wakeWord'
 import { emptyCorrectionCounts, emptyFormBreakdown, migrateWorkoutSession } from '../src/lib/sessionMigration'
-import { activationHmac, createDeviceIdentity, decryptIdentity, encryptIdentity } from '../server/xiaozhi/identity'
+import {
+  activationHmac, createDeviceIdentity, createPublicSessionToken, decodeSharedIdentity, decryptIdentity,
+  encodeSharedIdentity, encryptIdentity, getIdentityMode, isAllowedOrigin, resolveRequestIdentity,
+  verifyPublicSessionToken,
+} from '../server/xiaozhi/identity'
 import { fetchOta, pollActivation } from '../server/xiaozhi/ota'
 
 const uint8 = new DataView(Uint8Array.from([0x00, 147]).buffer)
@@ -71,6 +75,19 @@ assert.notEqual(encrypted, JSON.stringify(identity), 'Cookie 中不能出现身�
 assert.deepEqual(decryptIdentity(encrypted), identity, 'AES-GCM Cookie 应可无损解密')
 assert.match(activationHmac(identity, 'challenge'), /^[a-f0-9]{64}$/)
 assert.equal(decryptIdentity(`${encrypted}tampered`), null, '被篡改的 Cookie 必须拒绝')
+const sharedIdentity = { ...identity, activated: true }
+const sharedEncoded = encodeSharedIdentity(sharedIdentity)
+assert.deepEqual(decodeSharedIdentity(sharedEncoded), sharedIdentity, '共享身份应能从服务端环境变量恢复')
+assert.equal(decodeSharedIdentity(Buffer.from('{"activated":true}').toString('base64url')), null, '共享身份缺字段时必须拒绝')
+assert.deepEqual(resolveRequestIdentity({ headers: {} }, 'shared', sharedEncoded), sharedIdentity)
+assert.equal(resolveRequestIdentity({ headers: {} }, 'disabled', sharedEncoded), null)
+assert.equal(getIdentityMode('unexpected'), 'disabled', '未知模式应关闭语音，不能意外退回访客激活')
+const publicSession = createPublicSessionToken(1_000, 7_200_000, 'test-session-secret')
+assert.equal(verifyPublicSessionToken(publicSession, 2_000, 'test-session-secret'), true)
+assert.equal(verifyPublicSessionToken(`${publicSession}x`, 2_000, 'test-session-secret'), false)
+assert.equal(verifyPublicSessionToken(publicSession, 7_201_001, 'test-session-secret'), false)
+assert.equal(isAllowedOrigin('https://dongban.xzrcloud.xyz', undefined, 'production'), true)
+assert.equal(isAllowedOrigin('https://attacker.example', undefined, 'production'), false)
 
 const originalFetch = globalThis.fetch
 let otaHeaders: Headers | null = null

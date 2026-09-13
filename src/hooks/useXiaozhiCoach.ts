@@ -4,7 +4,7 @@ import { cancelSpeech } from '../lib/tts'
 import { WakeWordWindow } from '../lib/wakeWord'
 import { XiaozhiAudio } from '../lib/xiaozhiAudio'
 import { abortMessage, helloMessage, listenMessage, mapXiaozhiEmotion, mcpError, mcpNotification, mcpResult, mcpTextResult } from '../lib/xiaozhiProtocol'
-import type { CoachEmotion, PoseIssue, VisionFrameJob, VisionInsight, WorkoutContext, XiaozhiDataSyncState, XiaozhiState } from '../types'
+import type { CoachEmotion, PoseIssue, VisionFrameJob, VisionInsight, WorkoutContext, XiaozhiDataSyncState, XiaozhiDeviceBootstrap, XiaozhiIdentityMode, XiaozhiState } from '../types'
 
 type CoachSource = 'xiaozhi' | 'compatible' | 'local'
 type CuePriority = 'low' | 'normal' | 'high'
@@ -58,6 +58,7 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
   const [emotion, setEmotion] = useState<CoachEmotion>('neutral')
   const [activationCode, setActivationCode] = useState('')
   const [activationMessage, setActivationMessage] = useState('')
+  const [identityMode, setIdentityMode] = useState<XiaozhiIdentityMode>('personal')
   const [errorMessage, setErrorMessage] = useState('')
   const [muted, setMuted] = useState(false)
   const [fallbackMode, setFallbackMode] = useState(!XIAOZHI_ENABLED)
@@ -74,6 +75,7 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
   const stateRef = useRef(state)
   const mutedRef = useRef(muted)
   const consentRef = useRef(visionConsent)
+  const identityModeRef = useRef<XiaozhiIdentityMode>('personal')
   const socketRef = useRef<WebSocket | null>(null)
   const sessionIdRef = useRef('')
   const mcpReadyRef = useRef(false)
@@ -348,6 +350,11 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
         mcpReadyRef.current = false
         setDataSyncState(current => ({ ...current, mcpReady: false }))
         if (event.code === 4401) {
+          if (identityModeRef.current === 'shared') {
+            setErrorMessage('语音会话已过期，正在恢复连接')
+            void initialize()
+            return
+          }
           setFallbackMode(true)
           setState('fallback')
           setErrorMessage('小智设备尚未激活，已切换到文字反馈')
@@ -365,8 +372,10 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
       setState('connecting')
       try {
         const response = await fetch('/api/xiaozhi/device', { method: 'POST', credentials: 'include' })
-        const body = await response.json()
+        const body = await response.json() as XiaozhiDeviceBootstrap & { error?: string }
         if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`)
+        identityModeRef.current = body.mode
+        setIdentityMode(body.mode)
         if (body.status === 'activating') {
           setActivationCode(body.code || '')
           setActivationMessage(body.message || '请在 xiaozhi.me 输入激活码')
@@ -598,7 +607,7 @@ export function useXiaozhiCoach({ enabled, context, videoRef, visionConsent }: O
     source, wake, interrupt, retry, prepareAudio,
     sendWorkoutContext,
     say, requestVision, captureRepFrame, notifyCompletedRep, dataSyncState,
-    activationCode, activationMessage, errorMessage: errorMessage || fallback.errorMessage,
+    activationCode, activationMessage, identityMode, errorMessage: errorMessage || fallback.errorMessage,
     muted, toggleMute, supported: fallbackMode ? fallback.supported : Boolean(recognizerCtor()),
     inConversation: publicState === 'listening' || publicState === 'thinking' || publicState === 'speaking',
     hasModel: source !== 'local', neural: source === 'xiaozhi', xiaozhiVoiceReady: source === 'xiaozhi' && xiaozhiVoiceReady,
