@@ -19,18 +19,27 @@ if (firstOta.activation?.code && firstOta.activation.challenge) {
 
   let activated = false
   while (Date.now() < identity.activation.expiresAt) {
-    const status = await pollActivation(identity)
-    if (status === 'ready') {
-      activated = true
-      break
+    try {
+      const status = await pollActivation(identity)
+      if (status === 'ready') {
+        activated = true
+        break
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '临时网络异常'
+      console.log(`等待激活时遇到临时错误：${message}，继续重试…`)
     }
     await delay(3_000)
   }
   if (!activated) throw new Error('激活码已过期，请重新运行 pnpm provision:xiaozhi')
 }
 
-const ready = await fetchOta(identity)
-if (ready.activation || !ready.websocket?.url || !ready.websocket.token) throw new Error('设备尚未绑定到智能体')
+let ready = await fetchOta(identity).catch(() => null)
+for (let attempt = 0; !ready && attempt < 2; attempt += 1) {
+  await delay(1_500)
+  ready = await fetchOta(identity).catch(() => null)
+}
+if (!ready || ready.activation || !ready.websocket?.url || !ready.websocket.token) throw new Error('设备尚未绑定到智能体')
 identity.activated = true
 delete identity.activation
 
