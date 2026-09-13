@@ -3,6 +3,8 @@ dist/
 .docx-review/
 .env
 .env.local
+.env.*
+!.env.example
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts

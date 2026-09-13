@@ -1,4 +1,7 @@
 export type Route = 'home' | 'workout' | 'summary' | 'avatar' | 'inventory'
+export type AvatarGender = 'male' | 'female'
+export type OutfitPreset = 'default' | 'penguin' | 'sakura' | 'sunset_sakura'
+export type AvatarView = 'front' | 'side'
 export type Slot = 'head' | 'top' | 'bottom' | 'shoes' | 'gloves' | 'prop' | 'badge' | 'effect'
 export type Rarity = 'N' | 'R' | 'SR' | 'SSR'
 export type HeartRateZone = 1 | 2 | 3 | 4 | 5
@@ -121,7 +124,14 @@ export interface WorkoutSession extends WorkoutMetrics, ZoneDurations {
   maxBpm: number | null
   heartRateSource: 'ble' | null
   xpEarned: number
+  baseXpEarned?: number
+  missionXpEarned?: number
+  xpBefore?: number
+  xpAfter?: number
+  levelBefore?: number
+  levelAfter?: number
   unlocked: string[]
+  unlockedOutfits?: OutfitPreset[]
   formBreakdown: FormBreakdown
   correctionCounts: Record<PoseIssue, number>
   visionInsights: VisionInsight[]
@@ -136,13 +146,20 @@ export interface DailyMissionProgress {
 }
 
 export interface AppState {
-  gender: 'male' | 'female'
+  avatarGender: AvatarGender
+  activeOutfit: OutfitPreset
+  unlockedOutfits: Record<OutfitPreset, boolean>
+  seenOutfits: OutfitPreset[]
+  newlyUnlockedOutfits: OutfitPreset[]
   nickname: string
   age: number
   level: number
   xp: number
+  totalXp: number
   streakDays: number
   workouts: number
+  completedWorkoutCount: number
+  highScoreWorkoutCount: number
   totalSquats: number
   equipment: Equipment[]
   equipped: Partial<Record<Slot, string>>

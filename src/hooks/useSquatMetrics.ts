@@ -94,6 +94,15 @@ export function useSquatMetrics(landmarks: NormalizedLandmark[] | null, simulate
     }
 
     if (phase === 'standing' && reachedBottom.current) {
+      if (metricsRef.current.reps >= metricsRef.current.targetReps) {
+        reachedBottom.current = false
+        bottomScore.current = 0
+        repFrames.current = []
+        cycleIssues.current = new Set()
+        phaseRef.current = phase
+        setMetrics(current => ({ ...current, phase, poseFeedback, feedback: '已完成目标次数' }))
+        return
+      }
       const repScore = Math.round(bottomScore.current || frame.formScore)
       repScores.current.push(repScore)
       allRepFrames.current.push(...repFrames.current)
@@ -114,8 +123,8 @@ export function useSquatMetrics(landmarks: NormalizedLandmark[] | null, simulate
       const breakdown = averageBreakdown(allRepFrames.current)
       phaseRef.current = phase
       setMetrics(current => ({
-        ...current, reps: current.reps + 1, formScore: average,
-        perfectReps: current.perfectReps + (repScore >= 90 ? 1 : 0),
+        ...current, reps: Math.min(current.targetReps, current.reps + 1), formScore: average,
+        perfectReps: current.perfectReps < current.targetReps ? current.perfectReps + (repScore >= 90 ? 1 : 0) : current.perfectReps,
         feedback: completedIssues.length ? poseFeedback.message : '完成一次，刚才的节奏很稳',
         phase, poseFeedback, formBreakdown: breakdown, correctionCounts: nextCounts,
         lastRepIssues: completedIssues, repeatedIssue,
@@ -141,7 +150,8 @@ export function useSquatMetrics(landmarks: NormalizedLandmark[] | null, simulate
       const poseFeedback: PoseFeedback = { status: 'stable', confidence: 1, issues: [], primaryIssue: null, message: 'Demo · 姿势稳定，保持节奏', affectedJoints: [], calibrated: true }
       setMetrics(current => {
         if (!completed) return { ...current, phase, poseFeedback, feedback: poseFeedback.message }
-        const nextReps = current.reps + 1
+        if (current.reps >= current.targetReps) return { ...current, phase, poseFeedback, feedback: 'Demo · 已完成目标次数' }
+        const nextReps = Math.min(current.targetReps, current.reps + 1)
         const repScore = 86 + (nextReps % 5) * 2
         repScores.current.push(repScore)
         const average = Math.round(repScores.current.reduce((sum, score) => sum + score, 0) / repScores.current.length)

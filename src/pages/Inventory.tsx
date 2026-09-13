@@ -3,7 +3,7 @@ import { Header } from '../components/Header'
 import { useStore } from '../lib/store'
 import type { Rarity } from '../types'
 
-const rarityLabel: Record<Rarity, string> = { N: '普通', R: '稀有', SR: '史诗', SSR: '特殊' }
+const rarityLabel: Record<Rarity, string> = { N: '普通', R: '稀有', SR: '超稀有', SSR: '典藏' }
 
 export function Inventory() {
   const { state, equip } = useStore()

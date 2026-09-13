@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { getHeartRateZone } from '../src/lib/heartRate'
-import { calculateWorkoutXP } from '../src/lib/rewards'
+import { applyWorkout, calculateWorkoutXp, evaluateOutfitUnlocks, progressFromTotalXp, requiredXp } from '../src/lib/rewards'
 import { parseHeartRateMeasurement } from '../src/services/bleHeartRate'
-import type { WorkoutSession } from '../src/types'
+import type { AppState, Equipment, WorkoutSession } from '../src/types'
 import { createCorrectionGateState, decideCorrectionCue, detectPoseIssues, medianLandmarks } from '../src/lib/poseFeedback'
 import { abortMessage, helloMessage, listenMessage, mapXiaozhiEmotion, mcpNotification, mcpTextResult } from '../src/lib/xiaozhiProtocol'
 import { matchesWakeWord, WakeWordWindow } from '../src/lib/wakeWord'
@@ -29,7 +29,41 @@ const session: WorkoutSession = {
   xpEarned: 0, unlocked: [],
   formBreakdown: emptyFormBreakdown(), correctionCounts: emptyCorrectionCounts(), visionInsights: [], conversationTurnCount: 0,
 }
-assert.equal(calculateWorkoutXP(session), 122, 'XP 应为 round(20*3*1.2+50)')
+assert.equal(calculateWorkoutXp(session), 140, '20 次且评分 90+ 应获得 50+40+50 XP')
+assert.equal(calculateWorkoutXp({ reps: 200, formScore: 100 }), 300, '单次训练基础 XP 必须封顶 300')
+assert.equal(requiredXp(1), 300)
+assert.equal(requiredXp(5), 700)
+assert.deepEqual(progressFromTotalXp(750), { level: 3, xp: 50 }, '累计 XP 应支持连续升级并保留余量')
+
+const rewardEquipment = (id: string, slot: Equipment['slot']): Equipment => ({ id, slot, name: id, rarity: 'N', image: '', accent: '', condition: '', owned: false })
+const outfitRewardState: AppState = {
+  avatarGender: 'male', activeOutfit: 'default', nickname: 'test', age: 24, level: 1, xp: 0, totalXp: 0, streakDays: 0,
+  workouts: 2, completedWorkoutCount: 2, highScoreWorkoutCount: 2,
+  totalSquats: 90,
+  equipment: [rewardEquipment('penguin_hood', 'head'), rewardEquipment('comet_running_shoes', 'shoes'), rewardEquipment('sakura_gloves', 'gloves')],
+  equipped: {}, history: [], dailyMissionProgress: { date: '', squatReps: 0, zone3Seconds: 0, hasHighScoreWorkout: false },
+  unlockedOutfits: { default: true, penguin: false, sakura: false, sunset_sakura: false },
+  seenOutfits: ['default'], newlyUnlockedOutfits: [],
+}
+const outfitReward = applyWorkout(outfitRewardState, session)
+assert.deepEqual(outfitReward.session.unlockedOutfits, ['penguin', 'sakura'])
+assert.equal(outfitReward.next.unlockedOutfits.sakura, true, '90+ 动作评分应解锁樱花套装')
+assert.equal(outfitReward.session.baseXpEarned, 140)
+assert.equal(outfitReward.session.missionXpEarned, 200)
+const duplicateReward = applyWorkout(outfitReward.next, session)
+assert.equal(duplicateReward.next.totalXp, outfitReward.next.totalXp, '同一训练 session 不能重复领取 XP')
+assert.equal(duplicateReward.next.history.length, 1, '同一训练 session 不能重复写入历史')
+const noRepeatUnlock = applyWorkout(outfitReward.next, { ...session, id: 'next-session', formScore: 70 }, false)
+assert.deepEqual(noRepeatUnlock.session.unlockedOutfits, [], '已经解锁的套装不能重复触发新解锁')
+
+const sunsetReward = applyWorkout({ ...outfitRewardState, workouts: 4, completedWorkoutCount: 4, highScoreWorkoutCount: 0, totalXp: 900 }, { ...session, id: 'sunset', formScore: 80 }, false)
+assert.deepEqual(sunsetReward.session.unlockedOutfits, ['penguin', 'sunset_sakura'])
+assert.equal(sunsetReward.next.unlockedOutfits.sunset_sakura, true, '完成 5 次训练应解锁落日樱花套装')
+assert.deepEqual(evaluateOutfitUnlocks({ ...outfitRewardState, level: 5 }).newlyUnlockedOutfits, ['sunset_sakura'], 'Lv.5 应直接解锁落日樱花套装')
+
+const multiLevelReward = applyWorkout({ ...outfitRewardState, xp: 250, totalXp: 250, completedWorkoutCount: 0, workouts: 0, highScoreWorkoutCount: 0 }, { ...session, id: 'multi', reps: 200 })
+assert.equal(multiLevelReward.session.xpEarned, 500)
+assert.deepEqual({ level: multiLevelReward.next.level, xp: multiLevelReward.next.xp }, { level: 3, xp: 50 })
 
 const identity = createDeviceIdentity()
 const encrypted = encryptIdentity(identity)

@@ -9,18 +9,20 @@ import oceanWaveTop from '../assets/equipment/top/ocean_wave_top.png'
 import type { AppState, Equipment } from '../types'
 
 export const equipmentSeed: Equipment[] = [
-  { id: 'penguin_hood', name: '企鹅兜帽', slot: 'head', rarity: 'N', image: penguinHood, accent: '#55c9ff', condition: '正式装备素材', owned: true },
+  { id: 'penguin_hood', name: '企鹅兜帽', slot: 'head', rarity: 'SR', image: penguinHood, accent: '#9b6cff', condition: '正式装备素材', owned: true },
   { id: 'sunset_bandana', name: '落日头巾', slot: 'head', rarity: 'N', image: sunsetBandana, accent: '#ff8c64', condition: '正式装备素材', owned: true },
-  { id: 'ocean_wave_top', name: '海浪上衣', slot: 'top', rarity: 'N', image: oceanWaveTop, accent: '#3fd9f1', condition: '正式装备素材', owned: true },
-  { id: 'purple_star_shorts', name: '紫星短裤', slot: 'bottom', rarity: 'N', image: purpleStarShorts, accent: '#9b74f5', condition: '正式装备素材', owned: true },
-  { id: 'comet_running_shoes', name: '彗星跑鞋', slot: 'shoes', rarity: 'N', image: cometRunningShoes, accent: '#52c8ff', condition: '正式装备素材', owned: true },
-  { id: 'sakura_gloves', name: '樱花手套', slot: 'gloves', rarity: 'N', image: sakuraGloves, accent: '#ff8eb7', condition: '完成一次动作评分 90+ 的训练', owned: false },
-  { id: 'shiba_bottle', name: '柴犬水壶', slot: 'prop', rarity: 'N', image: shibaBottle, accent: '#f2a34a', condition: '正式装备素材', owned: true },
-  { id: 'emerald_star_medal', name: '翡翠星勋章', slot: 'badge', rarity: 'N', image: emeraldStarMedal, accent: '#21d98a', condition: '正式装备素材', owned: true },
+  { id: 'ocean_wave_top', name: '海浪上衣', slot: 'top', rarity: 'R', image: oceanWaveTop, accent: '#438cff', condition: '正式装备素材', owned: true },
+  { id: 'purple_star_shorts', name: '紫金短裤', slot: 'bottom', rarity: 'R', image: purpleStarShorts, accent: '#438cff', condition: '正式装备素材', owned: true },
+  { id: 'comet_running_shoes', name: '彗星跑鞋', slot: 'shoes', rarity: 'SR', image: cometRunningShoes, accent: '#9b6cff', condition: '正式装备素材', owned: true },
+  { id: 'sakura_gloves', name: '樱花手套', slot: 'gloves', rarity: 'SR', image: sakuraGloves, accent: '#9b6cff', condition: '完成一次动作评分 90+ 的训练', owned: false },
+  { id: 'shiba_bottle', name: '柴犬水壶', slot: 'prop', rarity: 'SR', image: shibaBottle, accent: '#9b6cff', condition: '正式装备素材', owned: true },
+  { id: 'emerald_star_medal', name: '翡翠星勋章', slot: 'badge', rarity: 'SSR', image: emeraldStarMedal, accent: '#d6a31e', condition: '正式装备素材', owned: true },
 ]
 
 export const initialState: AppState = {
-  gender: 'male', nickname: 'Jero', age: 24, level: 1, xp: 0, streakDays: 0, workouts: 0, totalSquats: 0,
+  avatarGender: 'male', activeOutfit: 'default', unlockedOutfits: { default: true, penguin: false, sakura: false, sunset_sakura: false },
+  seenOutfits: ['default'], newlyUnlockedOutfits: [],
+  nickname: 'Jero', age: 24, level: 1, xp: 0, totalXp: 0, streakDays: 0, workouts: 0, completedWorkoutCount: 0, highScoreWorkoutCount: 0, totalSquats: 0,
   equipment: equipmentSeed,
   equipped: { head: 'penguin_hood', top: 'ocean_wave_top', bottom: 'purple_star_shorts', shoes: 'comet_running_shoes', prop: 'shiba_bottle', badge: 'emerald_star_medal' },
   history: [],

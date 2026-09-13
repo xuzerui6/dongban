@@ -3,7 +3,7 @@ import { Header } from '../components/Header'
 import { Icon } from '../components/Icons'
 import { useStore } from '../lib/store'
 import { useHeartRateMonitor } from '../hooks/useHeartRateMonitor'
-import { calculateDailyMissionProgress, localDateKey } from '../lib/rewards'
+import { calculateDailyMissionProgress, localDateKey, requiredXp } from '../lib/rewards'
 
 export function Home({ start }: { start: () => void }) {
   const { state } = useStore()
@@ -15,6 +15,7 @@ export function Home({ start }: { start: () => void }) {
     return state.history.filter(session => localDateKey(new Date(session.startTime)) === key).length
   })
   const trainedThisWeek = week.filter(count => count > 0).length
+  const levelXp = requiredXp(state.level)
   const tasks = [
     { name: '深蹲 20 次', value: Math.min(daily.squatReps, 20), total: 20, reward: 60 },
     { name: '目标心率 5 分钟', value: Math.min(Number((daily.zone3Seconds / 60).toFixed(1)), 5), total: 5, reward: 40 },
@@ -28,8 +29,8 @@ export function Home({ start }: { start: () => void }) {
       <div className="speech">更强的<br/>自己！</div>
       <AvatarFigure view="side" />
       <div className="identity"><b>{state.nickname}</b><span>Lv.{state.level}</span></div>
-      <div className="xp-row"><div className="progress"><i style={{width:`${state.xp/10}%`}}/></div><small>{state.xp} / 1000 XP</small></div>
-      <div className="level-hint">再获 {1000-state.xp} XP 即可升级</div>
+      <div className="xp-row"><div className="progress"><i style={{width:`${Math.min(100, state.xp/levelXp*100)}%`}}/></div><small>{state.xp} / {levelXp} XP</small></div>
+      <div className="level-hint">距离升级还差 {levelXp-state.xp} XP</div>
     </section>
     <button className="primary start-btn" onClick={start}><Icon name="dumbbell"/>开始训练<Icon name="arrow"/></button>
     <section className="card task-card"><div className="section-title"><b>今日任务</b><span>{tasks.filter(t=>t.value>=t.total).length} / 3 完成</span></div>{tasks.map(t=><div className="task" key={t.name}><div className={t.value>=t.total?'task-check done':'task-check'}>{t.value>=t.total&&<Icon name="check" size={13}/>}</div><div className="task-info"><b>{t.name}</b><div className="task-progress"><i style={{width:`${Math.min(100,t.value/t.total*100)}%`}}/></div></div><small>{t.value}/{t.total}</small><em>+{t.reward} XP</em></div>)}</section>
