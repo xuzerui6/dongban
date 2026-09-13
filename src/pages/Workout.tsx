@@ -44,6 +44,9 @@ export function Workout({ back, finish }: { back: () => void; finish: (session: 
     poseStatus: metrics.poseFeedback.status,
     poseIssues: metrics.poseFeedback.issues,
     recentScore: metrics.formScore,
+    lastRepAt: null,
+    lastRepIssues: metrics.lastRepIssues,
+    latestVisionInsight: null,
   }), [metrics.reps, metrics.targetReps, metrics.phase, metrics.poseFeedback.status, metrics.poseFeedback.issues, metrics.formScore, session?.durationSeconds, heartRate.connected, heartRate.signalInterrupted, heartRate.currentBpm, active, paused])
 
   const voice = useXiaozhiCoach({ enabled: active, context: voiceContext, videoRef: pose.videoRef, visionConsent: visionConsent === true })
@@ -73,6 +76,27 @@ export function Workout({ back, finish }: { back: () => void; finish: (session: 
     correctionGateRef.current = createCorrectionGateState()
   }, [active])
 
+  // 每次动作首次到达最低点时保留候选帧，只存在内存；动作完整完成后才上传。
+  const capturedBottomRepRef = useRef(-1)
+  useEffect(() => {
+    if (!active || paused || simulatedPose || visionConsent !== true || metrics.phase !== 'bottom') return
+    if (capturedBottomRepRef.current === metrics.reps) return
+    capturedBottomRepRef.current = metrics.reps
+    voiceRef.current.captureRepFrame()
+  }, [active, paused, simulatedPose, visionConsent, metrics.phase, metrics.reps])
+
+  const syncedRepRef = useRef(0)
+  useEffect(() => {
+    if (!active || metrics.reps <= syncedRepRef.current) return
+    syncedRepRef.current = metrics.reps
+    voiceRef.current.notifyCompletedRep(metrics.reps, metrics.lastRepIssues)
+  }, [active, metrics.reps, metrics.lastRepIssues])
+  useEffect(() => {
+    if (active) return
+    syncedRepRef.current = 0
+    capturedBottomRepRef.current = -1
+  }, [active])
+
   useEffect(() => {
     if (!active || paused) return
     const timer = window.setInterval(() => {
@@ -91,14 +115,7 @@ export function Workout({ back, finish }: { back: () => void; finish: (session: 
     correctedRepRef.current = metrics.reps
     const cue = decideCorrectionCue(metrics.lastRepIssues, Date.now(), correctionGateRef.current)
     if (cue) voiceRef.current.say(cue.text, 'high')
-    if (metrics.repeatedIssue && visionConsent === true) {
-      const issue = metrics.repeatedIssue
-      voiceRef.current.requestVision(
-        `这是一次深蹲关键帧。本地算法连续检测到“${POSE_ISSUE_COPY[issue].label}”。请用朋友口吻简短复核，只给一个可执行建议；不要诊断，不要推翻本地计数。`,
-        'repeated_issue', issue,
-      )
-    }
-  }, [active, simulatedPose, metrics.reps, metrics.lastRepIssues, metrics.repeatedIssue, visionConsent])
+  }, [active, simulatedPose, metrics.reps, metrics.lastRepIssues])
 
   const startRealPose = () => {
     if (visionConsent === null) return
@@ -120,7 +137,7 @@ export function Workout({ back, finish }: { back: () => void; finish: (session: 
     <div className="setup-visual"><div className="scan-ring"><Icon name="spark" size={42}/></div><span className="eyebrow">准备训练</span><h2>选择识别方式</h2><p>姿态识别和实时矫正始终在浏览器本地运行；原始视频不会保存。</p></div>
     <div className="vision-consent" role="group" aria-label="关键帧复核选择">
       <b>开始前确认视觉范围</b>
-      <p>小智只会在你主动要求“看看动作”，或同一问题连续影响两次动作时收到一张压缩关键帧。</p>
+      <p>允许后，每次完整动作最多上传一张最低点附近的压缩关键帧；你主动说“看看动作”时也可即时复核。图片不落盘、不写入训练历史。</p>
       <div>
         <button className={visionConsent === false ? 'selected' : ''} onClick={() => setVisionConsent(false)}>仅本地分析</button>
         <button className={visionConsent === true ? 'selected' : ''} onClick={() => setVisionConsent(true)}>允许智能复核</button>
@@ -152,6 +169,14 @@ export function Workout({ back, finish }: { back: () => void; finish: (session: 
       {(voice.state === 'speaking' || voice.state === 'thinking') && <button className="interrupt-btn" onClick={voice.interrupt}>打断</button>}
       <button className="voice-mute" onClick={voice.toggleMute} aria-label={voice.muted ? '打开声音' : '关闭声音'}><Icon name={voice.muted ? 'volumeOff' : 'volume'} size={15}/></button>
       <em>{SOURCE_LABEL[voice.source]}{voice.xiaozhiVoiceReady ? ' · 声音就绪' : ''}{voice.visionAvailable && visionConsent ? ' · 视觉就绪' : ''}</em>
+    </div>
+    <div className="xiaozhi-sync" aria-live="polite">
+      <span className={voice.dataSyncState.mcpReady ? 'ok' : ''}>{voice.dataSyncState.mcpReady ? 'MCP 已连接' : 'MCP 等待中'}</span>
+      {voice.dataSyncState.lastRepSynced > 0 && <span className="ok">第 {voice.dataSyncState.lastRepSynced} 次数据已同步</span>}
+      {voice.dataSyncState.visionStatus !== 'idle' && <span className={voice.dataSyncState.visionStatus === 'failed' ? 'error' : voice.dataSyncState.visionStatus === 'reviewed' ? 'ok' : ''}>
+        {voice.dataSyncState.visionRep ? `第 ${voice.dataSyncState.visionRep} 次` : '当前'}关键帧{voice.dataSyncState.visionStatus === 'queued' ? '已排队' : voice.dataSyncState.visionStatus === 'reviewed' ? '已复核' : '复核失败'}
+      </span>}
+      {voice.dataSyncState.wakeDetected && <span className="heard">已听到唤醒词</span>}
     </div>
     <div className="zone-card"><div><Icon name="heart"/><span>当前心率<b>{!heartRate.connected ? '未连接' : heartRate.signalInterrupted ? '信号中断' : heartRate.currentBpm ? <>{heartRate.currentBpm} <small>BPM</small></> : '等待数据'}</b></span></div><div className="zones">{[1, 2, 3, 4, 5].map(zone => <span key={zone} className={heartRate.currentZone === zone ? 'current' : ''}><i/>Zone {zone}</span>)}</div></div>
     <div className="workout-actions"><button className="secondary" onClick={() => setPaused(value => !value)}><Icon name={paused ? 'play' : 'pause'}/>{paused ? '继续' : '暂停'}</button><button className="primary" onClick={done}><Icon name="check"/>完成本组</button></div>

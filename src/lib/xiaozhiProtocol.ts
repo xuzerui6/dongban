@@ -1,16 +1,37 @@
-import type { CoachEmotion } from '../types'
+import type { CoachEmotion, McpTextResult, XiaozhiEnvelope } from '../types'
 
 export const XIAOZHI_AUDIO = { format: 'opus', sample_rate: 16_000, channels: 1, frame_duration: 60 } as const
 
 export const helloMessage = () => ({
   type: 'hello', version: 1, features: { mcp: true }, transport: 'websocket', audio_params: XIAOZHI_AUDIO,
 })
-export const listenMessage = (state: 'start' | 'stop') => state === 'start'
-  ? { type: 'listen', state, mode: 'auto' }
-  : { type: 'listen', state }
-export const abortMessage = (reason = 'user_interrupt') => ({ type: 'abort', reason })
-export const mcpResult = (id: string | number, result: unknown) => ({ type: 'mcp', payload: { jsonrpc: '2.0', id, result } })
-export const mcpError = (id: string | number, message: string) => ({ type: 'mcp', payload: { jsonrpc: '2.0', id, error: { code: -32000, message } } })
+
+const session = <T extends Record<string, unknown>>(message: T, sessionId?: string): T & { session_id?: string } => (
+  sessionId ? { ...message, session_id: sessionId } : message
+)
+
+export const listenMessage = (state: 'start' | 'stop' | 'detect', sessionId?: string, text?: string): XiaozhiEnvelope => {
+  if (state === 'start') return session({ type: 'listen', state, mode: 'auto' }, sessionId)
+  if (state === 'detect') return session({ type: 'listen', state, text: text || '你好动伴' }, sessionId)
+  return session({ type: 'listen', state }, sessionId)
+}
+export const abortMessage = (reason = 'user_interrupt', sessionId?: string): XiaozhiEnvelope => session({ type: 'abort', reason }, sessionId)
+export const mcpResult = (id: string | number, result: unknown, sessionId?: string): XiaozhiEnvelope => session({
+  type: 'mcp', payload: { jsonrpc: '2.0', id, result },
+}, sessionId)
+export const mcpTextResult = (id: string | number, value: unknown, sessionId?: string, isError = false): XiaozhiEnvelope => {
+  const result: McpTextResult = {
+    content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
+    isError,
+  }
+  return mcpResult(id, result, sessionId)
+}
+export const mcpError = (id: string | number, message: string, sessionId?: string): XiaozhiEnvelope => session({
+  type: 'mcp', payload: { jsonrpc: '2.0', id, error: { code: -32000, message } },
+}, sessionId)
+export const mcpNotification = (method: string, params: unknown, sessionId?: string): XiaozhiEnvelope => session({
+  type: 'mcp', payload: { jsonrpc: '2.0', method, params },
+}, sessionId)
 
 const EMOTIONS: Record<string, CoachEmotion> = {
   neutral: 'neutral', listening: 'listening', thinking: 'thinking', happy: 'happy', laughing: 'happy',

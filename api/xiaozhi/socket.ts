@@ -9,9 +9,15 @@ export const maxDuration = 300
 type VisionConfig = { url: string; token?: string }
 const json = (value: unknown) => JSON.stringify(value)
 
+class VisionError extends Error {
+  constructor(message: string, readonly retryable = false) {
+    super(message)
+  }
+}
+
 async function explainFrame(config: VisionConfig, identity: NonNullable<ReturnType<typeof readIdentity>>, dataUrl: string, question: string) {
   const bytes = Buffer.from(dataUrl.replace(/^data:image\/jpeg;base64,/, ''), 'base64')
-  if (!bytes.length || bytes.length > 1_500_000) throw new Error('关键帧大小无效')
+  if (!bytes.length || bytes.length > 1_500_000) throw new VisionError('关键帧大小无效')
   const form = new FormData()
   form.append('question', question)
   form.append('file', new Blob([bytes], { type: 'image/jpeg' }), 'camera.jpg')
@@ -23,7 +29,7 @@ async function explainFrame(config: VisionConfig, identity: NonNullable<ReturnTy
     },
   })
   const body = await response.text()
-  if (!response.ok) throw new Error(`视觉复核返回 HTTP ${response.status}`)
+  if (!response.ok) throw new VisionError(`视觉复核返回 HTTP ${response.status}`, response.status === 429 || response.status >= 500)
   try { return JSON.parse(body) as unknown } catch { return { success: true, text: body } }
 }
 
@@ -81,22 +87,31 @@ wss.on('connection', async (browser, request) => {
   browser.on('message', async (data, isBinary) => {
     if (!isBinary) {
       try {
-        const message = JSON.parse(data.toString()) as { bridge?: string; image?: string; question?: string; requestId?: string; mcpId?: string | number }
+        const message = JSON.parse(data.toString()) as {
+          bridge?: string; image?: string; question?: string; requestId?: string
+          mcpId?: string | number; sessionId?: string
+        }
         if (message.bridge === 'ping') return browser.send(json({ bridge: 'pong' }))
         if (message.bridge === 'vision_frame') {
           if (!vision || !message.image) {
             const error = '视觉服务未就绪或没有关键帧'
-            if (message.mcpId !== undefined && upstream?.readyState === WebSocket.OPEN) upstream.send(json({ type: 'mcp', payload: { jsonrpc: '2.0', id: message.mcpId, error: { code: -32000, message: error } } }))
-            return browser.send(json({ bridge: 'vision_result', requestId: message.requestId, error }))
+            return browser.send(json({
+              bridge: 'vision_result', requestId: message.requestId, mcpId: message.mcpId,
+              sessionId: message.sessionId, error, retryable: false,
+            }))
           }
           try {
             const result = await explainFrame(vision, identity, message.image, message.question || '请简短描述动作中最值得调整的一点，不做医疗诊断。')
-            if (message.mcpId !== undefined && upstream?.readyState === WebSocket.OPEN) upstream.send(json({ type: 'mcp', payload: { jsonrpc: '2.0', id: message.mcpId, result } }))
-            return browser.send(json({ bridge: 'vision_result', requestId: message.requestId, result }))
+            return browser.send(json({
+              bridge: 'vision_result', requestId: message.requestId, mcpId: message.mcpId,
+              sessionId: message.sessionId, result,
+            }))
           } catch (error) {
             const detail = error instanceof Error ? error.message : '视觉复核失败'
-            if (message.mcpId !== undefined && upstream?.readyState === WebSocket.OPEN) upstream.send(json({ type: 'mcp', payload: { jsonrpc: '2.0', id: message.mcpId, error: { code: -32000, message: detail } } }))
-            return browser.send(json({ bridge: 'vision_result', requestId: message.requestId, error: detail }))
+            return browser.send(json({
+              bridge: 'vision_result', requestId: message.requestId, mcpId: message.mcpId,
+              sessionId: message.sessionId, error: detail, retryable: error instanceof VisionError && error.retryable,
+            }))
           }
         }
       } catch { /* 原生协议文本，继续转发 */ }

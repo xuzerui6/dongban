@@ -4,7 +4,8 @@ import { calculateWorkoutXP } from '../src/lib/rewards'
 import { parseHeartRateMeasurement } from '../src/services/bleHeartRate'
 import type { WorkoutSession } from '../src/types'
 import { createCorrectionGateState, decideCorrectionCue, detectPoseIssues, medianLandmarks } from '../src/lib/poseFeedback'
-import { abortMessage, helloMessage, listenMessage, mapXiaozhiEmotion } from '../src/lib/xiaozhiProtocol'
+import { abortMessage, helloMessage, listenMessage, mapXiaozhiEmotion, mcpNotification, mcpTextResult } from '../src/lib/xiaozhiProtocol'
+import { matchesWakeWord, WakeWordWindow } from '../src/lib/wakeWord'
 import { emptyCorrectionCounts, emptyFormBreakdown, migrateWorkoutSession } from '../src/lib/sessionMigration'
 import { activationHmac, createDeviceIdentity, decryptIdentity, encryptIdentity } from '../server/xiaozhi/identity'
 import { fetchOta, pollActivation } from '../server/xiaozhi/ota'
@@ -57,7 +58,29 @@ globalThis.fetch = originalFetch
 assert.deepEqual(helloMessage().audio_params, { format: 'opus', sample_rate: 16000, channels: 1, frame_duration: 60 })
 assert.deepEqual(listenMessage('start'), { type: 'listen', state: 'start', mode: 'auto' })
 assert.deepEqual(abortMessage(), { type: 'abort', reason: 'user_interrupt' })
+assert.deepEqual(listenMessage('detect', 'session-1'), { type: 'listen', state: 'detect', text: '你好动伴', session_id: 'session-1' })
+assert.equal(abortMessage('user_interrupt', 'session-1').session_id, 'session-1')
+assert.equal(mcpNotification('notifications/workout_progress', { reps: 3 }, 'session-1').session_id, 'session-1')
+const toolResult = mcpTextResult(9, { reps: 3 }, 'session-1')
+assert.equal(toolResult.session_id, 'session-1')
+assert.deepEqual(toolResult.payload, {
+  jsonrpc: '2.0', id: 9,
+  result: { content: [{ type: 'text', text: '{"reps":3}' }], isError: false },
+})
 assert.equal(mapXiaozhiEmotion('excited'), 'celebrating')
+
+assert.equal(matchesWakeWord('你好东伴'), true)
+assert.equal(matchesWakeWord('教练'), true)
+assert.equal(matchesWakeWord('dongban'), true)
+assert.equal(matchesWakeWord('今天动作标准吗'), false)
+const splitWake = new WakeWordWindow()
+assert.equal(splitWake.push('你好', true, 1_000).matched, false)
+assert.equal(splitWake.push('动伴', true, 2_000).matched, true, '拆开的 final 结果应合并唤醒')
+assert.equal(splitWake.push('动伴', true, 3_000).matched, false, '三秒内重复结果应去重')
+assert.equal(splitWake.push('动伴', true, 5_100).matched, true)
+const interimWake = new WakeWordWindow()
+assert.equal(interimWake.push(['你好冬半', '你好动伴', '你好动漫'], false, 1_000).matched, false, 'interim 首次命中不应立即唤醒')
+assert.equal(interimWake.push(['你好冬半', '你好动伴'], false, 1_100).matched, true, '三个候选中的唤醒词连续命中应触发')
 
 const landmarkFrames = [1, 9, 5, 3, 7].map(x => Array.from({ length: 29 }, () => ({ x, y: .5, z: 0, visibility: .9 })))
 assert.equal(medianLandmarks(landmarkFrames)?.[0].x, 5, '五帧中值应过滤跳点')

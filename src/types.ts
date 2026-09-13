@@ -28,9 +28,43 @@ export interface PoseFeedback {
 export interface VisionInsight {
   id: string
   createdAt: string
-  trigger: 'user' | 'repeated_issue'
+  trigger: 'user' | 'completed_rep' | 'repeated_issue'
   issue: PoseIssue | null
+  rep?: number
   summary: string
+}
+
+export interface XiaozhiEnvelope<T = unknown> {
+  type: string
+  session_id?: string
+  payload?: T
+  [key: string]: unknown
+}
+
+export interface McpTextResult {
+  content: Array<{ type: 'text'; text: string }>
+  isError: boolean
+}
+
+export interface VisionFrameJob {
+  id: string
+  rep: number | null
+  image: string
+  question: string
+  trigger: VisionInsight['trigger']
+  issue: PoseIssue | null
+  retries: number
+  priority: 'user' | 'automatic'
+  mcpId?: string | number
+  sessionId?: string
+}
+
+export interface XiaozhiDataSyncState {
+  mcpReady: boolean
+  lastRepSynced: number
+  visionRep: number | null
+  visionStatus: 'idle' | 'queued' | 'reviewed' | 'failed'
+  wakeDetected: boolean
 }
 
 export interface WorkoutContext {
@@ -43,6 +77,9 @@ export interface WorkoutContext {
   poseStatus: PoseConfidence
   poseIssues: PoseIssue[]
   recentScore: number
+  lastRepAt: string | null
+  lastRepIssues: PoseIssue[]
+  latestVisionInsight: VisionInsight | null
 }
 
 export interface Equipment {

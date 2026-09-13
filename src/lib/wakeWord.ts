@@ -25,6 +25,8 @@ for (const head of NAME_HEAD) {
 }
 NAMES.push('dongban', 'dongbam')
 
+const DIRECT_ALIASES = ['你好教练', '教练', '小伴', '嗨动伴', '嘿动伴']
+
 /** 去掉空白与标点并转小写，让「你好，动伴。」和「你好动伴」等价 */
 export function normalize(text: string): string {
   return text
@@ -37,7 +39,42 @@ export function normalize(text: string): string {
 export function matchesWakeWord(text: string): boolean {
   const flat = normalize(text)
   if (!flat) return false
-  return NAMES.some(name => flat.includes(name))
+  return NAMES.some(name => flat.includes(name)) || DIRECT_ALIASES.some(alias => flat.includes(alias))
+}
+
+interface WakeSegment { text: string; at: number }
+
+/**
+ * Web Speech 会把一句唤醒词拆成多个结果。这个缓冲只保留六秒内最近四段，
+ * final 命中立即通过；interim 必须连续命中两次，避免一闪而过的误识别。
+ */
+export class WakeWordWindow {
+  private segments: WakeSegment[] = []
+  private interimMatches = 0
+  private lastWakeAt = -Infinity
+
+  push(input: string | string[], isFinal: boolean, now = Date.now()): { matched: boolean; combined: string } {
+    const candidates = (Array.isArray(input) ? input : [input]).filter(Boolean).slice(0, 3)
+    const primary = candidates[0] || ''
+    this.segments = this.segments.filter(item => now - item.at <= 6_000)
+    const existing = this.segments.map(item => item.text)
+    const candidateMatched = candidates.some(text => matchesWakeWord([...existing, text].join(' ')))
+    if (isFinal && primary.trim()) this.segments.push({ text: primary, at: now })
+    this.segments = this.segments.slice(-4)
+    const combined = [...existing, primary].join(' ')
+    if (isFinal) this.interimMatches = 0
+    else this.interimMatches = candidateMatched ? this.interimMatches + 1 : 0
+    const confirmed = isFinal ? candidateMatched : this.interimMatches >= 2
+    if (!confirmed || now - this.lastWakeAt < 3_000) return { matched: false, combined }
+    this.lastWakeAt = now
+    this.interimMatches = 0
+    return { matched: true, combined }
+  }
+
+  reset(): void {
+    this.segments = []
+    this.interimMatches = 0
+  }
 }
 
 /**

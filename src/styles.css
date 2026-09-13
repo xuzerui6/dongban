@@ -37,6 +37,7 @@
 .voice-bar.failed .voice-status svg,.voice-bar.unsupported .voice-status svg{color:#d2703a;margin-top:1px}
 .voice-bar.failed .voice-status small,.voice-bar.unsupported .voice-status small{white-space:normal;max-width:none;line-height:1.55;color:#a2603a}
 .voice-mute{width:42px;border:1px solid var(--line);border-radius:13px;background:#f7faf8;color:#7e8882;display:grid;place-items:center;flex:none}
+.xiaozhi-sync{display:flex;flex-wrap:wrap;gap:4px;margin:5px 2px 0}.xiaozhi-sync span{font-size:6px;font-weight:800;color:#718079;background:#eef2f0;border:1px solid #dfe7e3;border-radius:999px;padding:3px 6px}.xiaozhi-sync span.ok{color:#138e4d;background:#eaf9f0;border-color:#c9ecd7}.xiaozhi-sync span.error{color:#b04737;background:#fff0ed;border-color:#f1d2ca}.xiaozhi-sync span.heard{color:#226da3;background:#eaf5ff;border-color:#cce5f8}
 @keyframes voicePulse{50%{opacity:.35}}
 
 /* 小智陪练与实时矫姿 */
