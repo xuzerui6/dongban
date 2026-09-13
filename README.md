@@ -1,53 +1,162 @@
-# 动伴 Motion Buddy Web Demo
+# 动伴 Motion Buddy
 
-把真实训练转化为动作评分、心率反馈、XP、成就和数字分身装备的可运行黑客松 Demo。
+> 懂动作，也懂你的 AI 健身伙伴。
+
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![MediaPipe](https://img.shields.io/badge/MediaPipe-Pose-00A67E)](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker)
+[![Vercel](https://img.shields.io/badge/Vercel-Live-000?logo=vercel)](https://dongban.vercel.app/)
+
+**在线体验：[dongban.vercel.app](https://dongban.vercel.app/)**
+
+动伴是一款融合实时姿态识别、AI 语音交互和游戏化成长机制的智能健身伙伴。用户无需额外穿戴设备，只需打开摄像头，即可获得深蹲计数、动作评分、实时矫姿和自然语音陪练。
+
+## 为什么做动伴
+
+独自运动时，用户经常面临三个问题：不知道动作是否标准、得不到即时指导，以及很难长期坚持。传统运动应用往往只记录结果，缺少对训练过程的理解与陪伴。
+
+动伴希望让 AI 不只是计数器，而是一位能够看懂动作、理解训练数据，也愿意陪用户坚持下去的运动伙伴。
+
+## 核心体验
+
+### 实时视觉训练
+
+- 浏览器本地识别深蹲阶段并自动计数
+- 实时绘制人体骨架和问题关节
+- 检测身体未完整入镜、深度不足、膝盖不稳定、躯干前倾和左右不对称
+- 通过站姿校准、关键点置信度门控、五帧中值平滑和角度迟滞降低误判
+- 当前动作反馈约 200 ms 内更新
+
+### AI 语音陪练
+
+- 支持“你好动伴”“教练”“小伴”等宽松唤醒表达
+- 支持 Chrome 将“你好”和“动伴”拆开识别的情况
+- 可随时询问次数、阶段、心率、评分和姿势状态
+- 智能体在回答前读取网站中的最新训练数据，避免凭对话猜测
+- 所有可听回复使用统一的自然语音，不混入浏览器系统音色
+
+### 逐次动作复核
+
+- 用户授权后，每次完整动作最多复核一张最低点附近的关键帧
+- 用户主动提出“看看动作”时拥有最高处理优先级
+- 最多并发处理两个视觉任务，临时失败自动重试一次
+- 图片仅在内存中短暂存在，不落盘、不写入训练历史
+- 未授权云端复核时保持零图片请求
+
+### 游戏化成长
+
+- 训练次数、动作质量和心率区间转化为 XP
+- 每日任务、连续训练与等级成长
+- 装备解锁、稀有度与像素分身换装
+- 训练结算展示姿势问题分布、改善项和复核摘要
+
+## 演示流程
+
+1. 打开[在线版本](https://dongban.vercel.app/)，点击“开始训练”。
+2. 选择“仅本地分析”或“允许智能复核”，然后开启摄像头。
+3. 连续完成三次深蹲，观察实时次数、骨架和姿势反馈。
+4. 说“你好动伴”，或者直接点击语音状态条开始对话。
+5. 询问“我做几个了”，体验基于真实训练状态的回答。
+6. 询问“帮我看看动作”，体验当前画面的视觉复核。
+7. 完成本组，查看评分、调整线索、XP 和形象成长。
+
+没有摄像头时可选择“使用演示动作”，快速体验计数、评分和成长流程。
+
+## 技术架构
+
+```text
+摄像头 / BLE 心率带 / 麦克风
+              │
+              ▼
+┌──────────────────────────────────────┐
+│ 浏览器                               │
+│ MediaPipe Pose · 动作状态机 · UI     │
+│ 本地计数与矫姿 · 音频采集与播放       │
+└───────────────┬──────────────────────┘
+                │ WebSocket / Opus / MCP
+                ▼
+┌──────────────────────────────────────┐
+│ Vercel 实时桥接层                    │
+│ 会话管理 · 数据转发 · 视觉任务队列    │
+└───────────────┬──────────────────────┘
+                ▼
+       语音理解 · 智能体 · 视觉复核
+```
+
+### 前端
+
+- React 18 + TypeScript + Vite
+- MediaPipe Pose Landmarker
+- WebCodecs Opus 音频处理
+- Web Speech API 唤醒检测
+- Web Bluetooth Heart Rate Service
+
+### 实时与服务端
+
+- WebSocket 双向通信
+- MCP 只读训练状态与摄像头工具
+- Vercel Node Functions
+- 断线退避重连
+- JPEG 关键帧队列和失败重试
+
+## 技术亮点
+
+### 端云协同
+
+逐帧计数与矫姿在浏览器本地运行，云端仅处理语音交互和低频视觉理解，在实时性、成本和隐私之间取得平衡。
+
+### 真实数据驱动
+
+智能体通过只读工具获取最新次数、目标、阶段、时长、心率、评分和姿势问题。训练数据是回答依据，而不是聊天上下文中的猜测。
+
+### 隐私优先
+
+- 不持续上传视频
+- 原始视频和音频不写入训练历史
+- 图片上传前必须获得用户授权
+- 训练历史仅保存结构化结果
+- 智能体不能自动暂停、结束训练或修改用户数据
+
+### 网络异常不打断训练
+
+动作计数和姿势反馈不依赖网络。即使语音或云端视觉暂时不可用，本地训练仍可继续。
 
 ## 本地运行
 
+要求 Node.js 20+ 与 pnpm。
+
 ```bash
+git clone https://github.com/xuzerui6/dongban.git
+cd dongban
 pnpm install
 pnpm dev
 ```
 
-浏览器打开 `http://localhost:5173/`。BLE 心率带需要 Chrome 或 Edge，并通过 HTTPS 或 localhost 访问。
+打开 `http://localhost:5173/`。摄像头、麦克风和 BLE 功能建议使用最新版桌面 Chrome 或 Edge。
 
-## 已实现
-
-- 首页、今日任务、连续训练、XP 与等级
-- 摄像头 + MediaPipe Pose 浏览器端姿态识别
-- 深蹲状态机、2 秒站姿校准、五帧中值平滑、角度迟滞和防重复计数
-- 身体入镜、深度、膝盖轨迹、躯干前倾和左右对称五类实时矫姿
-- 小智官方 WebSocket / 裸 Opus / STT / TTS / emotion / MCP 对话，失败时自动降级
-- 用户授权后的低频 JPEG 关键帧复核；原始图片、音频和完整聊天不落盘
-- Web Bluetooth 标准心率服务（0x180D / 0x2A37），支持 uint8/uint16 Measurement 与断连状态
-- 所有 BPM、平均/最大心率与 Zone 数据仅由真实 BLE Notify 数据包驱动
-- 统一 WorkoutSession：训练计时、动作指标、平均/最大心率及 Zone 1–5 停留秒数
-- 训练结算使用真实 Session，并按 reps、动作质量和 Zone 3 时长计算 XP
-- 首页每日任务从当天训练历史聚合，训练结束立即刷新
-- 90+ 评分成就、精准训练手套解锁
-- 角色装备、装备库、锁定条件与稀有度
-- localStorage 本地持久化
-- 390×844 手机画布及桌面投影展示布局
-
-## 生产构建
+## 测试
 
 ```bash
 pnpm build
-pnpm preview
-```
-
-## 小智与 Vercel 配置
-
-复制 `.env.example`，在 Vercel 项目中配置 `XIAOZHI_COOKIE_SECRET`，并保留 `VITE_XIAOZHI_ENABLED=true`。部署后到 Project Settings → Functions 开启 Fluid Compute。WebSocket 函数最长运行 300 秒，浏览器会按 1、2、4、8、15 秒退避重连；训练计数不依赖网络。
-
-首次进入训练后，页面会显示六位激活码。登录 [xiaozhi.me](https://xiaozhi.me) 完成绑定即可。角色提示词见 [`docs/XIAOZHI_PERSONA.md`](docs/XIAOZHI_PERSONA.md)，第三方说明见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
-
-## 自测
-
-```bash
 pnpm test
 pnpm test:e2e
-pnpm run build
 ```
 
-核心测试覆盖 BLE Measurement flags、心率区间边界和 XP 公式。真实 BLE 连接必须在桌面 Chrome/Edge 的 HTTPS 或 localhost 页面中，由用户点击“连接心率带”并选择支持 Heart Rate Service 的设备。
+测试覆盖训练数据迁移、姿态平滑与矫正、宽松唤醒、实时协议、视觉工具结果，以及桌面和移动 Chromium 的核心训练流程。
+
+## 当前范围
+
+- 当前重点支持深蹲训练
+- 比赛演示环境面向最新版桌面 Chrome / Edge
+- 实时矫姿结论属于运动反馈，不构成医疗建议
+
+## 下一步
+
+- 扩展俯卧撑、平板支撑等更多动作
+- 根据长期训练记录生成个性化计划
+- 增加动作趋势分析和阶段性复盘
+- 支持好友挑战与多人训练
+
+---
+
+**动伴，让每一次训练都看得见成长。**
